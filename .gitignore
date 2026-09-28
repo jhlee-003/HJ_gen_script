@@ -1,0 +1,8 @@
+**/*.root
+**/voms_proxy.txt
+**/crab_projects/
+**/job_scripts/
+**/CMSSW_*/
+**/FrameworkJobReport.xml
+**/__pycache__/
+**/*.pyc
