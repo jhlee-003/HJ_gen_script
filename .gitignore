@@ -6,3 +6,5 @@
 **/FrameworkJobReport.xml
 **/__pycache__/
 **/*.pyc
+**/logs/
+**/condor_output/

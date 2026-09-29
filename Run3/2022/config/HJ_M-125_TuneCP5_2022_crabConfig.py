@@ -31,7 +31,7 @@ events_per_job = 10000
 number_of_jobs = 10000
 num_cores = 2
 
-# Numbered tasks avoid collisions without adding a timestamp to names.
+# Use numbered tasks for unique request names.
 task_number = 1
 while os.path.exists(os.path.join(work_area, "crab_{}_{}".format(base, task_number))):
     task_number += 1
@@ -50,7 +50,6 @@ config.JobType.scriptExe = os.path.join(project_dir, "crab_convert_wrapper.sh")
 config.JobType.numCores = num_cores
 config.JobType.maxMemoryMB = 5000
 config.JobType.maxJobRuntimeMin = 1200
-config.JobType.eventsPerLumi = 200
 config.JobType.inputFiles = [
     os.path.join(project_dir, "config", env_filename),
     os.path.join(project_dir, "config", names["Fragment_filename"]),
