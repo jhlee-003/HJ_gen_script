@@ -140,6 +140,18 @@ cmsDriver.py \
   --no_exec \
   --mc
 
+# KNU cannot currently open these premix LFNs through the CMS global
+# redirector, while the INFN redirector is reachable from the worker nodes.
+echo "Route premix files through the INFN XRootD redirector"
+sed -i \
+  -e "s#'/store/#'root://xrootd-cms.infn.it//store/#g" \
+  -e 's#"/store/#"root://xrootd-cms.infn.it//store/#g' \
+  "$TAG"__DIGIPREMIX__cfg.py
+if ! grep -q "root://xrootd-cms.infn.it//store/" "$TAG"__DIGIPREMIX__cfg.py; then
+  echo "ERROR: no premix LFNs were rewritten in ${TAG}__DIGIPREMIX__cfg.py" >&2
+  exit 22
+fi
+
 echo "Run cmssw with configuration file"
 cmsRun -j FrameworkJobReport.xml "$TAG"__DIGIPREMIX__cfg.py
 
