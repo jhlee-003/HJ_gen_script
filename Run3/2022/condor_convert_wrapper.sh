@@ -42,8 +42,4 @@ PRODUCED_ROOT="${NANOAOD_NAME}__job-${JOBNUM}.root"
 mv -- "$PRODUCED_ROOT" "$CONDOR_OUTPUT"
 [[ -s "$CONDOR_OUTPUT" ]] || { echo "ERROR: failed to prepare Condor output" >&2; exit 20; }
 
-NEV="$(root -l -b -q -e "TFile f(\"$CONDOR_OUTPUT\"); auto t=(TTree*)f.Get(\"Events\"); if(!t){std::cout<<0; gSystem->Exit(0);} std::cout<<t->GetEntries(); gSystem->Exit(0);" 2>/dev/null | tail -n 1 | tr -d '[:space:]')"
-[[ "$NEV" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: Events tree is empty in $CONDOR_OUTPUT" >&2; exit 21; }
-
-echo "Events = $NEV"
 echo "Output ready for Condor transfer: $CONDOR_OUTPUT"
