@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-if [[ $# -ne 5 ]]; then
-  echo "Usage: $0 CONDOR_PROCESS_ID NUMBER_OF_EVENTS ENV_FILE NUMBER_OF_THREADS JOB_OFFSET" >&2
+if [[ $# -ne 6 ]]; then
+  echo "Usage: $0 CONDOR_PROCESS_ID NUMBER_OF_EVENTS ENV_FILE NUMBER_OF_THREADS JOB_OFFSET STAGEOUT_FILE" >&2
   exit 2
 fi
 
@@ -11,13 +11,14 @@ NEVENTS=$2
 NAMES=$3
 NTHREADS=$4
 JOB_OFFSET=$5
+STAGEOUT_FILE=$6
 SCRIPT="ProduceHJ_M-125_TuneCP5_2022.sh"
-CONDOR_OUTPUT="condor_output.root"
 
 [[ "$PROCESS_ID" =~ ^[0-9]+$ ]] || { echo "ERROR: invalid Condor process ID: $PROCESS_ID" >&2; exit 2; }
 [[ "$NEVENTS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: invalid event count: $NEVENTS" >&2; exit 2; }
 [[ "$NTHREADS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: invalid thread count: $NTHREADS" >&2; exit 2; }
 [[ "$JOB_OFFSET" =~ ^[0-9]+$ ]] || { echo "ERROR: invalid job offset: $JOB_OFFSET" >&2; exit 2; }
+[[ "$STAGEOUT_FILE" =~ ^[A-Za-z0-9._-]+[.]root$ ]] || { echo "ERROR: invalid stageout filename: $STAGEOUT_FILE" >&2; exit 2; }
 [[ -f "$SCRIPT" ]] || { echo "ERROR: missing production script: $SCRIPT" >&2; exit 2; }
 [[ -f "$NAMES" ]] || { echo "ERROR: missing naming file: $NAMES" >&2; exit 2; }
 
@@ -38,8 +39,8 @@ bash "./$SCRIPT" "$JOB_INDEX" "$NEVENTS" "$NAMES"
 
 PRODUCED_ROOT="${NANOAOD_NAME}__job-${JOBNUM}.root"
 [[ -s "$PRODUCED_ROOT" ]] || { echo "ERROR: missing final output: $PRODUCED_ROOT" >&2; exit 20; }
-[[ ! -e "$CONDOR_OUTPUT" ]] || { echo "ERROR: output already exists: $CONDOR_OUTPUT" >&2; exit 20; }
-mv -- "$PRODUCED_ROOT" "$CONDOR_OUTPUT"
-[[ -s "$CONDOR_OUTPUT" ]] || { echo "ERROR: failed to prepare Condor output" >&2; exit 20; }
+[[ ! -e "$STAGEOUT_FILE" ]] || { echo "ERROR: output already exists: $STAGEOUT_FILE" >&2; exit 20; }
+mv -- "$PRODUCED_ROOT" "$STAGEOUT_FILE"
+[[ -s "$STAGEOUT_FILE" ]] || { echo "ERROR: failed to prepare Condor output" >&2; exit 20; }
 
-echo "Output ready for Condor transfer: $CONDOR_OUTPUT"
+echo "Output ready for HTCondor stageout to EOS: $STAGEOUT_FILE"

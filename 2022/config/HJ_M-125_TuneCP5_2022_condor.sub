@@ -1,5 +1,5 @@
-# Submit from Run3/2022 after creating the destination directories:
-#   mkdir -p logs condor_output
+# Submit from 2022 after creating the local log directory:
+#   mkdir -p logs
 #   condor_submit config/HJ_M-125_TuneCP5_2022_condor.sub
 
 universe = vanilla
@@ -20,7 +20,7 @@ job_number = $INT(job_number_expression)
 request_cpus = $(number_of_threads)
 request_memory = 5000
 request_disk = 8000000
-+MaxWallTimeMins = 1200
++JobFlavour = "tomorrow"
 
 log = logs/log_produce_hj_$(Cluster).$(Process).log
 output = logs/log_produce_hj_$(Cluster).$(Process).out
@@ -30,14 +30,17 @@ requirements = HasSingularity
 +SingularityImage = "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/cmssw/el8:x86_64"
 
 executable = condor_convert_wrapper.sh
-arguments = $(Process) $(events_per_job) HJ_M-125_TuneCP5_2022_FullSim.env $(number_of_threads) $(job_offset)
+nano_output_file = GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powhegMiNNLO-pythia8__Run3Summer22_NanoAODv12-130X_mcRun3_2022_realistic_v5__privateProduction__condor-$(Cluster)__job-$(job_number).root
+arguments = $(Process) $(events_per_job) HJ_M-125_TuneCP5_2022_FullSim.env $(number_of_threads) $(job_offset) $(nano_output_file)
 transfer_executable = True
 transfer_input_files = ProduceHJ_M-125_TuneCP5_2022.sh, config/HJ_M-125_TuneCP5_2022_FullSim.env, config/HJ_M-125_TuneCP5_2022_fragment.py
 
 should_transfer_files = YES
 when_to_transfer_output = ON_SUCCESS
-transfer_output_files = condor_output.root
-transfer_output_remaps = "condor_output.root=condor_output/GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powhegMiNNLO-pythia8__Run3Summer22_NanoAODv12-130X_mcRun3_2022_realistic_v5__privateProduction__condor-$(Cluster)__job-$(job_number).root"
+success_exit_code = 0
+transfer_output_files = $(nano_output_file)
+output_destination = root://eosuser.cern.ch//eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022/
+MY.XRDCP_CREATE_DIR = True
 
 # Failed jobs do not attempt output transfer; this policy holds on the cmsRun
 # exit code instead of masking it as a missing-output transfer failure.
@@ -45,5 +48,6 @@ on_exit_hold = (ExitBySignal == True) || (ExitCode != 0)
 
 # Delegate the current VOMS proxy; do not store a proxy in the repository.
 use_x509userproxy = True
+x509userproxy = $ENV(X509_USER_PROXY)
 
 queue $(number_of_jobs)
