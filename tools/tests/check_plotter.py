@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""End-to-end synthetic NanoAOD check; requires PyROOT, no EOS access."""
+
+import importlib.util
+import math
+import tempfile
+from array import array
+from pathlib import Path
+from unittest.mock import patch
+
+import ROOT
+
+ROOT.PyConfig.IgnoreCommandLineOptions = True
+ROOT.gROOT.SetBatch(True)
+ROOT.TH1.SetDefaultSumw2(True)
+ROOT.EnableImplicitMT(2)
+repo = Path(__file__).resolve().parents[2]
+spec = importlib.util.spec_from_file_location("plotter", repo / "tools/plot_nanoaod_kinematics.py")
+plotter = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(plotter)
+
+
+def event(flavor="Electron", charge=(1, -1), photon_eta=(0.3,), photon_phi=(1.5,), jets=(), weight=1.):
+    row = {name: [] for name in plotter.REQUIRED_BRANCHES if name != "genWeight"}
+    row.update({flavor + "_pt": [45., 45.], flavor + "_eta": [0., 0.],
+                flavor + "_phi": [0., math.pi], flavor + "_mass": [0.000511 if flavor == "Electron" else 0.10566] * 2,
+                flavor + "_charge": list(charge), "Photon_pt": [30. + 20. * i for i in range(len(photon_eta))],
+                "Photon_eta": list(photon_eta), "Photon_phi": list(photon_phi), "genWeight": weight})
+    for name, index in (("Jet_pt", 0), ("Jet_eta", 1), ("Jet_phi", 2), ("Jet_jetId", 3)):
+        row[name] = [jet[index] for jet in jets]
+    return row
+
+
+def write_file(path, rows):
+    output = ROOT.TFile(str(path), "RECREATE")
+    tree = ROOT.TTree("Events", "Synthetic NanoAOD for testing")
+    buffers = {}
+    for name in plotter.REQUIRED_BRANCHES:
+        if name == "genWeight":
+            buffers[name] = array("f", [0.])
+            tree.Branch(name, buffers[name], "genWeight/F")
+        else:
+            buffers[name] = ROOT.std.vector("int" if name.endswith(("_charge", "_jetId")) else "float")()
+            tree.Branch(name, buffers[name])
+    for row in rows:
+        for name, buffer in buffers.items():
+            if name == "genWeight":
+                buffer[0] = row[name]
+            else:
+                buffer.clear()
+                for value in row[name]:
+                    buffer.push_back(value)
+        tree.Fill()
+    tree.Write()
+    output.Close()
+
+
+def main():
+    rows = [
+        event(weight=2.),
+        event(flavor="Muon", jets=((60., 2., -1., 2),)),
+        event(jets=((60., 2., -1., 2),), weight=-0.25),
+        event(charge=(1, 1)),
+        event(photon_eta=(), photon_phi=()),
+        event(photon_eta=(1.5,)),
+        event(photon_eta=(0.,), photon_phi=(0.,)),
+        event(jets=((25., 2., -1., 2), (60., 2., -1., 2), (80., 0., 0.01, 2),
+                    (100., 2., -1., 0), (350., 1., -2., 2)), weight=2.),
+        event(photon_eta=(0.3, 0.3), photon_phi=(1.5, 1.5)),
+    ]
+    with tempfile.TemporaryDirectory(prefix="hj_plotter_check_", dir=repo) as directory:
+        directory = Path(directory)
+        files = [directory / "pilot__condor-1.root", directory / "production__condor-2.root"]
+        write_file(files[0], rows[:4])
+        write_file(files[1], rows[4:])
+        # Discovery includes both clusters, ignores non-ROOT files, and uses no glob over URLs.
+        listing = "\n".join(["/eos/user/j/junhyuk/2022/" + p.name for p in files] + ["/eos/user/j/junhyuk/2022/logs"])
+        with patch.object(plotter.shutil, "which", return_value="xrdfs"), patch.object(plotter.subprocess, "run") as run:
+            run.return_value.stdout = listing
+            discovered, label = plotter.list_nanoaod_files("root://eosuser.cern.ch//eos/user/j/junhyuk/2022")
+            assert len(discovered) == 2 and label == "2022"
+            assert all(url.startswith("root://eosuser.cern.ch//eos/user/") for url in discovered)
+        assert plotter.validate_files(ROOT, [str(p) for p in files]) == 9
+        histograms, counts = plotter.book_histograms(ROOT, [str(p) for p in files])
+        assert tuple(counts[:3]) == (9, 5, 3), counts
+        assert abs(counts[3] - 5.75) < 1.e-10, counts
+        jets = histograms[4]
+        assert abs(jets.GetBinContent(jets.FindBin(0)) - 3.) < 1.e-10
+        assert abs(jets.GetBinContent(jets.FindBin(1)) - 0.75) < 1.e-10
+        assert abs(jets.GetBinContent(jets.FindBin(2)) - 2.) < 1.e-10
+        leading = histograms[5]
+        assert abs(leading.GetBinContent(leading.GetNbinsX() + 1) - 2.) < 1.e-10
+        assert abs(ROOT.hjplot.delta_r(0., math.pi - 0.01, 0., -math.pi + 0.01) - 0.02) < 1.e-10
+        output = repo / "plots/HJ_synthetic_test_kinematics.png"
+        plotter.draw_plots(ROOT, histograms, counts, 2, 9, "Synthetic validation (not production data)", output)
+        assert output.stat().st_size > 10_000
+        assert all(abs(h.Integral() - 1.) < 1.e-10 for h in histograms)
+        assert leading.GetBinContent(leading.GetNbinsX()) > 0.
+        empty = ROOT.TH1D("empty_check", "", 10, 0., 100.)
+        plotter.normalize_histogram(empty)
+        assert empty.Integral() == 0. and empty.GetEntries() == 0.
+        # An input with a wrong schema must cause an explicit failure.
+        bad = directory / "wrong_schema.root"
+        source = ROOT.TFile(str(bad), "RECREATE")
+        ROOT.TTree("Events", "wrong schema").Write()
+        source.Close()
+        try:
+            plotter.validate_files(ROOT, [str(bad)])
+        except ValueError as error:
+            assert "Missing NanoAOD branches" in str(error)
+        else:
+            raise AssertionError("Wrong-schema file was not rejected")
+    print("PASS: multi-file reading, ee/mumu candidates, rejected candidates, signed weights,")
+    print("      cleaned/unsorted jets, wrapped phi, overflow, empty jets, schema check and PNG.")
+    print("Preview: " + str(output))
+
+
+if __name__ == "__main__":
+    main()
