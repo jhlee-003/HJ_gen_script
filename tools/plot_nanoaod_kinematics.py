@@ -23,6 +23,8 @@ CPP_HELPERS = r"""
 #ifndef HJ_NANOAOD_PLOT_HELPERS
 #define HJ_NANOAOD_PLOT_HELPERS
 #include <ROOT/RVec.hxx>
+#include <Math/Boost.h>
+#include <Math/Vector3D.h>
 #include <Math/Vector4D.h>
 #include <algorithm>
 #include <cmath>
@@ -31,10 +33,17 @@ CPP_HELPERS = r"""
 namespace hjplot {
 using ROOT::VecOps::RVec;
 using P4 = ROOT::Math::PtEtaPhiMVector;
+using CartesianP4 = ROOT::Math::PxPyPzEVector;
+struct Angles {
+    double cos_Theta = std::numeric_limits<double>::quiet_NaN();
+    double cos_theta = std::numeric_limits<double>::quiet_NaN();
+};
 struct Candidate {
     bool valid = false;
     double pt_over_mass = 0., photon_eta = 0., dr_min = 0., dr_max = 0.;
     double m_llgamma = 0., m_ll = 0., photon_pt = 0., pt_llgamma = 0.;
+    double cos_Theta = std::numeric_limits<double>::quiet_NaN();
+    double cos_theta = std::numeric_limits<double>::quiet_NaN();
     int n_jets = 0;
     double leading_jet_pt = -1.;
 };
@@ -46,6 +55,36 @@ bool finite_p4(double pt, double eta, double phi, double mass) {
     return std::isfinite(pt) && std::isfinite(eta) && std::isfinite(phi)
         && std::isfinite(mass) && pt > 0. && mass >= 0.;
 }
+double direction_cosine(const ROOT::Math::XYZVector& first,
+                        const ROOT::Math::XYZVector& second) {
+    const double norm = std::sqrt(first.Mag2()) * std::sqrt(second.Mag2());
+    if (!std::isfinite(norm) || norm <= 0.) return std::numeric_limits<double>::quiet_NaN();
+    const double value = first.Dot(second) / norm;
+    if (!std::isfinite(value)) return std::numeric_limits<double>::quiet_NaN();
+    return std::clamp(value, -1., 1.);
+}
+Angles decay_angles(const CartesianP4& z, const CartesianP4& photon,
+                    const CartesianP4& negative_lepton) {
+    Angles result;
+    const auto higgs = z + photon;
+    const auto has_rest_frame = [](const CartesianP4& p) {
+        return std::isfinite(p.E()) && p.E() > 0. && std::isfinite(p.M2())
+            && p.M2() > 0. && p.BoostToCM().Mag2() < 1.;
+    };
+    if (has_rest_frame(higgs)) {
+        const ROOT::Math::Boost to_higgs(higgs.BoostToCM());
+        // Helicity-axis prescription of arXiv:1112.1405: Z in the H rest
+        // frame relative to the lab Zgamma flight direction, not lab Z eta.
+        // Exactly zero lab momentum leaves this axis undefined (NaN).
+        result.cos_Theta = direction_cosine(to_higgs(z).Vect(), higgs.Vect());
+    }
+    if (has_rest_frame(z)) {
+        const ROOT::Math::Boost to_z(z.BoostToCM());
+        // CMS HIG-25-010: negatively charged lepton versus photon in Z rest.
+        result.cos_theta = direction_cosine(to_z(negative_lepton).Vect(), to_z(photon).Vect());
+    }
+    return result;
+}
 // Prefer the eligible pair closest to mZ, then its highest-pT photon.
 template <typename Charge>
 void consider_pairs(const RVec<float>& pt, const RVec<float>& eta,
@@ -54,7 +93,7 @@ void consider_pairs(const RVec<float>& pt, const RVec<float>& eta,
                     const RVec<float>& photon_pt, const RVec<float>& photon_eta,
                     const RVec<float>& photon_phi, double& best_distance,
                     double& best_photon_pt, Candidate& result,
-                    P4& best_l1, P4& best_l2, P4& best_photon,
+                    P4& best_l1, P4& best_l2, P4& best_photon, P4& best_lminus,
                     bool apply_selection) {
     for (std::size_t i = 0; i < pt.size(); ++i) {
         if (!finite_p4(pt[i], eta[i], phi[i], mass[i])) continue;
@@ -87,6 +126,7 @@ void consider_pairs(const RVec<float>& pt, const RVec<float>& eta,
                 best_l1 = l1;
                 best_l2 = l2;
                 best_photon = photon;
+                best_lminus = charge[i] < 0 ? l1 : l2;
                 result.valid = true;
                 result.pt_over_mass = higgs.Pt() / higgs.M();
                 result.photon_eta = photon_eta[k];
@@ -115,14 +155,17 @@ Candidate build(const RVec<float>& electron_pt, const RVec<float>& electron_eta,
     Candidate result;
     double best_distance = std::numeric_limits<double>::infinity();
     double best_photon_pt = -1.;
-    P4 l1, l2, photon;
+    P4 l1, l2, photon, lminus;
     consider_pairs(electron_pt, electron_eta, electron_phi, electron_mass,
                    electron_charge, 2.5, photon_pt, photon_eta, photon_phi,
-                   best_distance, best_photon_pt, result, l1, l2, photon, apply_selection);
+                   best_distance, best_photon_pt, result, l1, l2, photon, lminus, apply_selection);
     consider_pairs(muon_pt, muon_eta, muon_phi, muon_mass,
                    muon_charge, 2.4, photon_pt, photon_eta, photon_phi,
-                   best_distance, best_photon_pt, result, l1, l2, photon, apply_selection);
+                   best_distance, best_photon_pt, result, l1, l2, photon, lminus, apply_selection);
     if (!result.valid) return result;
+    const auto angles = decay_angles(CartesianP4(l1 + l2), CartesianP4(photon), CartesianP4(lminus));
+    result.cos_Theta = angles.cos_Theta;
+    result.cos_theta = angles.cos_theta;
     for (std::size_t j = 0; j < jet_pt.size(); ++j) {
         if (!finite_p4(jet_pt[j], jet_eta[j], jet_phi[j], 0.)) continue;
         if (apply_selection && (jet_pt[j] <= 30. || std::abs(jet_eta[j]) >= 4.7
@@ -160,8 +203,8 @@ PANELS = (
     ("n_jets", "Jet multiplicity", "N_{jet}", 10, -0.5, 9.5),
     ("leading_jet_pt", "Leading-jet transverse momentum", "p_{T}(j_{1}) [GeV]", 50, 0., 300.),
     ("m_llgamma", "Dilepton-photon invariant mass", "m_{#it{l}#it{l}#gamma} [GeV]", 50, 100., 180.),
-    ("m_ll", "Dilepton invariant mass", "m_{#it{l}#it{l}} [GeV]", 50, 50., 120.),
-    ("photon_pt", "Photon transverse momentum", "p_{T}(#gamma) [GeV]", 50, 0., 200.),
+    ("cos_Theta", "Z boson production angle", "cos#Theta", 50, -1., 1.),
+    ("cos_theta", "Lepton production polar angle", "cos#theta", 50, -1., 1.),
     ("pt_llgamma", "Dilepton-photon transverse momentum", "p_{T}(#it{l}#it{l}#gamma) [GeV]", 50, 0., 300.),
 )
 
@@ -172,7 +215,7 @@ def panels_for_selection(apply_selection):
     if apply_selection:
         return PANELS
     return tuple(
-        (*panel[:3], 60, 0., 300.) if panel[0] in ("m_llgamma", "m_ll") else panel
+        (*panel[:3], 60, 0., 300.) if panel[0] == "m_llgamma" else panel
         for panel in PANELS
     )
 
@@ -280,6 +323,10 @@ def book_histograms(root, files, apply_selection=True, sample_name="sample"):
     actions = []
     for column, title, x_label, bins, low, high in panels:
         source = with_jet if column == "leading_jet_pt" else selected
+        if column in ("cos_Theta", "cos_theta"):
+            # An undefined rest-frame axis must not remove candidates from the
+            # other observables, or be folded into a physical endpoint bin.
+            source = source.Filter("std::isfinite(" + column + ")", "Defined " + column)
         actions.append(source.Histo1D((sample_name + "_" + column, "", bins, low, high), column, "plot_weight"))
     counts = (frame.Count(), selected.Count(), with_jet.Count(), selected.Sum("plot_weight"))
     # All actions are booked before this access: one loop fills all panels.
@@ -333,18 +380,16 @@ def make_ratio(root, private_hist, central_hist):
 
 
 def draw_y_title(root, pad, text, name):
-    """Use one horizontal anchor and pixel size for unequal-height pads."""
+    """Top-align both vertical titles at one x anchor and pixel font size."""
     pad.cd()
-    # The ratio frame is high in its short pad because of the x-axis margin.
-    # Keep the long rotated ratio title inside that pad instead of clipping it.
-    center = min(0.60, 0.5 * (pad.GetBottomMargin() + 1. - pad.GetTopMargin()))
-    title = root.TLatex(0.065, center, text)
+    title = root.TLatex(0.065, 1. - pad.GetTopMargin(), text)
     title.SetName(name)
     title.SetNDC(True)
     title.SetTextFont(43)
     title.SetTextSize(20.)
     title.SetTextAngle(90.)
-    title.SetTextAlign(22)
+    # Right alignment before the 90-degree rotation anchors the text's top end.
+    title.SetTextAlign(32)
     title.Draw()
     return title
 
@@ -406,10 +451,11 @@ def draw_plots(root, central_histograms, private_histograms, label, output, appl
         private.Draw("E SAME")
         keep.append(draw_y_title(root, top, "A.U. / {:g}{}".format(width, unit),
                                  "hj_y_title_top_" + str(index)))
-        header = root.TLegend(0.40, 0.825, 0.95, 0.89)
+        legend_left = 0.32
+        header = root.TLegend(legend_left, 0.825, 0.95, 0.89)
         # Dedicated non-overlapping columns leave room for the longer labels
         # and multi-million-event counts; text no longer crosses column borders.
-        names = root.TLegend(0.32, 0.695, 0.71, 0.825)
+        names = root.TLegend(legend_left, 0.695, 0.71, 0.825)
         counts = root.TLegend(0.74, 0.695, 0.95, 0.825)
         for legend in (header, names, counts):
             legend.SetBorderSize(0)
@@ -422,8 +468,8 @@ def draw_plots(root, central_histograms, private_histograms, label, output, appl
         names.SetMargin(0.11)
         names.AddEntry(central, " ggH_qme (central)", "l")
         names.AddEntry(private, " HJ (private)", "l")
-        counts.AddEntry(root.nullptr, "({:,})".format(int(central.GetEntries())), "")
-        counts.AddEntry(root.nullptr, "({:,})".format(int(private.GetEntries())), "")
+        counts.AddEntry(root.nullptr, "N={:,}".format(int(central.GetEntries())), "")
+        counts.AddEntry(root.nullptr, "N={:,}".format(int(private.GetEntries())), "")
         for legend in (header, names, counts):
             legend.Draw()
         cms = root.TLatex()

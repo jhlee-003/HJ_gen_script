@@ -40,11 +40,13 @@ plotter, so their file discovery, weighting, and rendering cannot drift apart.
 
 The layout follows the supplied comparison script: red ggH_qme (central) and
 blue HJ (private) line histograms, weighted error bars, legends with unweighted
-entry counts in a separate non-overlapping column, a
+entry counts prefixed with `N=` in a separate non-overlapping column, a
 CMS Private Work label and 13.6 TeV in each panel, and a Private/Central ratio
 pad with a dashed line at one. Each panel's sample label is “2022 ggF signal
-sample” for a private directory named 2022. Upper and ratio y-axis titles share
-one horizontal anchor and pixel font size. There is **no global title, event-summary banner,
+sample” for a private directory named 2022. The sample legend's left edge aligns
+with that heading. Upper and ratio y-axis titles are aligned to the top of their
+plot frames and share one horizontal anchor and pixel font size.
+There is **no global title, event-summary banner,
 or bottom selection/explanation text**. Selection details belong in this README
 and processing counts are printed to the terminal. No DY truth-matching
 requirements or data definitions from the reference script were adopted.
@@ -60,9 +62,33 @@ requirements or data definitions from the reference script were adopted.
 | Jet multiplicity | Number of jets as defined below | 0–8, ≥9 | same |
 | Leading-jet transverse momentum | Maximum jet `pT`; requires at least one jet | 0–300 GeV | same |
 | Dilepton–photon invariant mass | `m(llgamma)` | 100–180 GeV | 0–300 GeV |
-| Dilepton invariant mass | `m(ll)` | 50–120 GeV | 0–300 GeV |
-| Photon transverse momentum | `pT(gamma)` | 0–200 GeV | same |
+| Z boson production angle | `cos(Theta)`, defined below | −1–1 | same |
+| Lepton production polar angle | `cos(theta)`, defined below | −1–1 | same |
 | Dilepton–photon transverse momentum | `pT(llgamma)` | 0–300 GeV | same |
+
+### Rest-frame angle conventions
+
+Use the reconstructed candidate, with `Z = l+ + l-` and `H = Z + gamma`:
+
+- `cos(Theta)`: boost Z into the H rest frame and take the cosine between its
+  three-momentum and the **H flight direction in the laboratory**. This is the
+  helicity-axis prescription using the laboratory Zgamma momentum to accommodate
+  jet recoil in [Gainer et al., arXiv:1112.1405](https://arxiv.org/pdf/1112.1405).
+  It is a reconstructed production-axis convention, not generator parton
+  truth, a laboratory polar angle, or a Collins–Soper beam-bisector angle.
+- `cos(theta)`: boost the **negatively charged lepton** and the photon into the
+  Z rest frame, then take the cosine between their three-momenta. This follows
+  the lepton/photon sign convention described in
+  [CMS HIG-25-010, Section 5](https://arxiv.org/html/2609.04402v1#S5).
+  It uses the photon direction, not its opposite, and not a pT-ordered lepton.
+
+Both angles use full three-dimensional Lorentz boosts, in both plotter versions
+and both samples. Round-off is clamped to the physical range [−1, 1]. A zero
+H laboratory momentum leaves the production axis undefined; a non-timelike Z
+has no Z rest frame. Undefined angles are omitted **only from the affected
+angle histogram**, not from the other observables. Its `N=` entry count therefore
+reflects the candidates with a defined angle. Removing the `m(ll)` and photon
+pT panels does not remove their existing selection cuts or candidate ranking.
 
 ## Candidate definitions
 
@@ -133,7 +159,9 @@ With PyROOT available, run:
 
 This creates temporary synthetic NanoAOD files and checks both modes, multi-file
 reading, maxdepth-2 discovery, negative weights/errors, candidate ranking,
-jet cleaning, overflow handling, ratios, malformed inputs, and two PNG previews.
+jet cleaning, rest-frame angles against independent analytic/TLorentzVector
+checks, negative-lepton charge assignment, undefined-angle handling, overflow,
+ratios, top-aligned titles/legend layout, malformed inputs, and two PNG previews.
 It does not access production EOS data. Previews are saved separately as
 `plots/HJ_synthetic_test_central_vs_private_selected.png` and
 `plots/HJ_synthetic_test_central_vs_private_no_selection.png`.

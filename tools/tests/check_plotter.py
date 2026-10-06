@@ -72,16 +72,80 @@ def check_canvas_format(canvas):
         ratio_title = bottom.GetPrimitive("hj_y_title_ratio_" + str(index))
         assert upper_title.GetX() == ratio_title.GetX() == 0.065
         assert upper_title.GetTextSize() == ratio_title.GetTextSize()
-        assert ratio_title.GetTextSize() == 20. and ratio_title.GetY() == 0.60
+        assert ratio_title.GetTextSize() == 20.
+        assert abs(upper_title.GetY() - (1. - top.GetTopMargin())) < 1.e-7
+        assert abs(ratio_title.GetY() - (1. - bottom.GetTopMargin())) < 1.e-7
+        assert upper_title.GetTextAlign() == ratio_title.GetTextAlign() == 32
         assert upper_title.GetTextFont() == ratio_title.GetTextFont() == 43
         legends = [p for p in top.GetListOfPrimitives() if p.InheritsFrom("TLegend")]
         assert len(legends) == 3
         labels = [entry.GetLabel() for legend in legends for entry in legend.GetListOfPrimitives()]
         assert "Synthetic ggF signal sample" in labels
         assert " ggH_qme (central)" in labels and " HJ (private)" in labels
+        assert legends[0].GetX1NDC() == legends[1].GetX1NDC()
         assert legends[1].GetX2NDC() < legends[2].GetX1NDC()
+        assert "N=10,234,567" in labels and "N=1,000,100" in labels
     checked_canvases.append(canvas.GetName())
     original_canvas_close(canvas)
+
+
+def cartesian(vector):
+    return ROOT.Math.PxPyPzEVector(vector.Px(), vector.Py(), vector.Pz(), vector.E())
+
+
+def check_angle_geometry():
+    """Known rest-frame angles, checked independently with TLorentzVector."""
+    mh, mz, polar_cosine = 125., 91.1876, -0.35
+    momentum = (mh * mh - mz * mz) / (2. * mh)
+    z_axis = ROOT.TVector3(0.8, 0., 0.6)
+    perpendicular = ROOT.TVector3(0.6, 0., -0.8)
+    z = ROOT.TLorentzVector(momentum * z_axis.X(), 0., momentum * z_axis.Z(),
+                            math.sqrt(momentum * momentum + mz * mz))
+    photon = ROOT.TLorentzVector(-z.Px(), 0., -z.Pz(), momentum)
+    # In Z rest the photon is along -z_axis. Place l- at a known angle to it.
+    direction = -polar_cosine * z_axis + math.sqrt(1. - polar_cosine ** 2) * perpendicular
+    negative = ROOT.TLorentzVector(direction.X() * mz / 2., 0., direction.Z() * mz / 2., mz / 2.)
+    positive = ROOT.TLorentzVector(-negative.Px(), 0., -negative.Pz(), negative.E())
+    negative.Boost(z.BoostVector())
+    positive.Boost(z.BoostVector())
+    rest_angles = ROOT.hjplot.decay_angles(cartesian(z), cartesian(photon), cartesian(negative))
+    assert math.isnan(rest_angles.cos_Theta)  # Zero H lab momentum: no flight axis.
+    assert abs(rest_angles.cos_theta - polar_cosine) < 1.e-12
+    # Non-collinear boosts exercise full 3D boosts, not eta/phi approximations.
+    for boost in (ROOT.TVector3(0., 0., 0.4), ROOT.TVector3(0.25, -0.12, 0.32)):
+        z_lab, photon_lab = ROOT.TLorentzVector(z), ROOT.TLorentzVector(photon)
+        negative_lab, positive_lab = ROOT.TLorentzVector(negative), ROOT.TLorentzVector(positive)
+        for vector in (z_lab, photon_lab, negative_lab, positive_lab):
+            vector.Boost(boost)
+        angles = ROOT.hjplot.decay_angles(cartesian(z_lab), cartesian(photon_lab), cartesian(negative_lab))
+        assert abs(angles.cos_Theta - z_axis.Dot(boost.Unit())) < 1.e-12
+        assert abs(angles.cos_theta - polar_cosine) < 1.e-12
+        swapped = ROOT.hjplot.decay_angles(cartesian(z_lab), cartesian(photon_lab), cartesian(positive_lab))
+        assert abs(swapped.cos_theta + polar_cosine) < 1.e-12
+        assert abs(swapped.cos_Theta - angles.cos_Theta) < 1.e-12
+    # A lightlike pair has no Z rest frame, rather than an angle of zero.
+    lightlike = ROOT.Math.PxPyPzEVector(10., 0., 0., 10.)
+    opposite = ROOT.Math.PxPyPzEVector(-5., 0., 0., 5.)
+    undefined = ROOT.hjplot.decay_angles(lightlike, opposite, lightlike)
+    assert math.isnan(undefined.cos_theta) and math.isfinite(undefined.cos_Theta)
+
+
+def reference_lepton_angle(row):
+    """Independent boost calculation using the NanoAOD float32 inputs."""
+    leptons = []
+    for index in range(2):
+        vector = ROOT.TLorentzVector()
+        vector.SetPtEtaPhiM(*(array("f", row["Electron_" + field])[index]
+                             for field in ("pt", "eta", "phi", "mass")))
+        leptons.append(vector)
+    z = leptons[0] + leptons[1]
+    negative = leptons[0] if row["Electron_charge"][0] < 0 else leptons[1]
+    photon = ROOT.TLorentzVector()
+    photon.SetPtEtaPhiM(*(array("f", row["Photon_" + field])[-1]
+                         for field in ("pt", "eta", "phi")), 0.)
+    negative.Boost(-z.BoostVector())
+    photon.Boost(-z.BoostVector())
+    return negative.Vect().Dot(photon.Vect()) / (negative.P() * photon.P())
 
 
 def main():
@@ -147,7 +211,36 @@ def main():
         leading = histograms[5]
         assert abs(leading.GetBinContent(leading.GetNbinsX() + 1) - 2.) < 1.e-10
         assert abs(ROOT.hjplot.delta_r(0., math.pi - 0.01, 0., -math.pi + 0.01) - 0.02) < 1.e-10
-        assert histograms[8].GetBinContent(histograms[8].FindBin(50.)) == 1.
+        assert {panel[0] for panel in plotter.PANELS}.isdisjoint({"m_ll", "photon_pt"})
+        for hist in histograms[7:9]:
+            assert hist.GetXaxis().GetXmin() == -1. and hist.GetXaxis().GetXmax() == 1.
+            assert hist.GetEntries() == 5.
+            assert abs(hist.Integral(0, hist.GetNbinsX() + 1) - 5.75) < 1.e-10
+        check_angle_geometry()
+        # Verify charge-based l- assignment inside candidate building, and
+        # preserve the highest-pT photon tie-break despite removing its panel.
+        charge_rows = [event(), event(charge=(-1, 1)), rows[-1]]
+        charge_file = directory / "angle_charge_order.root"
+        write_file(charge_file, charge_rows)
+        test_frame = ROOT.RDataFrame("Events", str(charge_file)).Define(
+            "candidate", "hjplot::build(" + ", ".join(plotter.REQUIRED_BRANCHES[:-1]) + ", false)")
+        test_frame = test_frame.Define("theta", "candidate.cos_theta").Define("chosen_photon_pt", "candidate.photon_pt")
+        theta_action = test_frame.Take["double"]("theta")
+        photon_action = test_frame.Take["double"]("chosen_photon_pt")
+        theta_values = list(theta_action.GetValue())
+        assert all(abs(actual - reference_lepton_angle(row)) < 1.e-10
+                   for actual, row in zip(theta_values, charge_rows))
+        assert abs(theta_values[0] + theta_values[1]) < 1.e-10
+        assert list(photon_action.GetValue()) == [30., 30., 50.]
+        # Undefined angles are filtered only for their own histogram, with no
+        # effect on the candidate count or the remaining plotted variables.
+        degenerate_file = directory / "undefined_z_rest_frame.root"
+        write_file(degenerate_file, [dict(event(), Electron_phi=[0., 0.], Electron_mass=[0., 0.])])
+        degenerate_hist, degenerate_counts = plotter.book_histograms(
+            ROOT, [str(degenerate_file)], False, "undefined_angle")
+        assert tuple(degenerate_counts[:2]) == (1, 1)
+        assert degenerate_hist[8].GetEntries() == 0.
+        assert all(h.GetEntries() == 1. for i, h in enumerate(degenerate_hist) if i not in (5, 8))
         # A second independent sample exercises repeated C++ declarations and
         # action names; scaling every weight leaves normalized shapes unchanged.
         central_rows = [dict(row, genWeight=3. * row["genWeight"]) for row in rows]
@@ -236,7 +329,8 @@ def main():
         else:
             raise AssertionError("Wrong-schema file was not rejected")
     print("PASS: both modes, ten variables, multi-file/maxdepth-2 discovery, OS ee/mumu pairing,")
-    print("      signed weights/errors/ratios, cuts, cleaned/unsorted jets, overflow and PNGs.")
+    print("      rest-frame angles/charge signs, signed weights/errors/ratios, cuts,")
+    print("      cleaned/unsorted jets, overflow, top-aligned titles, legends and PNGs.")
     print("Preview: " + str(output))
     print("Preview: " + str(raw_output))
 
