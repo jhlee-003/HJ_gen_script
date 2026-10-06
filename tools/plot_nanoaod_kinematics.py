@@ -332,6 +332,23 @@ def make_ratio(root, private_hist, central_hist):
     return graph
 
 
+def draw_y_title(root, pad, text, name):
+    """Use one horizontal anchor and pixel size for unequal-height pads."""
+    pad.cd()
+    # The ratio frame is high in its short pad because of the x-axis margin.
+    # Keep the long rotated ratio title inside that pad instead of clipping it.
+    center = min(0.60, 0.5 * (pad.GetBottomMargin() + 1. - pad.GetTopMargin()))
+    title = root.TLatex(0.065, center, text)
+    title.SetName(name)
+    title.SetNDC(True)
+    title.SetTextFont(43)
+    title.SetTextSize(20.)
+    title.SetTextAngle(90.)
+    title.SetTextAlign(22)
+    title.Draw()
+    return title
+
+
 def draw_plots(root, central_histograms, private_histograms, label, output, apply_selection=True):
     """Reference-style overlays and ratio pads, without global title/cut notes."""
     root.gStyle.SetOptStat(0)
@@ -378,10 +395,8 @@ def draw_plots(root, central_histograms, private_histograms, label, output, appl
         central.SetMinimum(min(0., min(v - e for v, e in values) * 1.15))
         width = (panel[5] - panel[4]) / panel[3]
         unit = " GeV" if panel[2].endswith("[GeV]") else ""
-        central.GetYaxis().SetTitle("A.U. / {:g}{}".format(width, unit))
-        central.GetYaxis().SetTitleSize(0.045)
+        central.GetYaxis().SetTitle("")
         central.GetYaxis().SetLabelSize(0.049)
-        central.GetYaxis().SetTitleOffset(1.15)
         central.GetYaxis().SetNdivisions(508)
         central.GetXaxis().SetLabelSize(0.)
         central.GetXaxis().SetTitleSize(0.)
@@ -389,19 +404,24 @@ def draw_plots(root, central_histograms, private_histograms, label, output, appl
         private.Draw("HIST SAME")
         central.Draw("E SAME")
         private.Draw("E SAME")
-        header = root.TLegend(0.55, 0.825, 0.94, 0.89)
-        names = root.TLegend(0.55, 0.695, 0.78, 0.825)
-        counts = root.TLegend(0.78, 0.695, 0.95, 0.825)
+        keep.append(draw_y_title(root, top, "A.U. / {:g}{}".format(width, unit),
+                                 "hj_y_title_top_" + str(index)))
+        header = root.TLegend(0.40, 0.825, 0.95, 0.89)
+        # Dedicated non-overlapping columns leave room for the longer labels
+        # and multi-million-event counts; text no longer crosses column borders.
+        names = root.TLegend(0.32, 0.695, 0.71, 0.825)
+        counts = root.TLegend(0.74, 0.695, 0.95, 0.825)
         for legend in (header, names, counts):
             legend.SetBorderSize(0)
             legend.SetFillStyle(0)
             legend.SetTextFont(42)
-            legend.SetTextSize(0.048)
+            legend.SetTextSize(0.040)
             legend.SetMargin(0.)
-        header.AddEntry(root.nullptr, "{} H #rightarrow Z#gamma".format(label), "")
+        header.SetTextSize(0.048)
+        header.AddEntry(root.nullptr, "{} ggF signal sample".format(label), "")
         names.SetMargin(0.11)
-        names.AddEntry(central, " Central", "l")
-        names.AddEntry(private, " Private", "l")
+        names.AddEntry(central, " ggH_qme (central)", "l")
+        names.AddEntry(private, " HJ (private)", "l")
         counts.AddEntry(root.nullptr, "({:,})".format(int(central.GetEntries())), "")
         counts.AddEntry(root.nullptr, "({:,})".format(int(private.GetEntries())), "")
         for legend in (header, names, counts):
@@ -424,20 +444,17 @@ def draw_plots(root, central_histograms, private_histograms, label, output, appl
         axis_hist = central.Clone("hj_ratio_axes_" + str(index))
         axis_hist.SetDirectory(0)
         axis_hist.Reset()
-        # Default reference range is 0--2; expand to retain outlying/signed points.
-        ratio_values = [ratio.GetPointY(p) for p in range(ratio.GetN())]
-        low, high = min([0.] + ratio_values), max([2.] + ratio_values)
-        axis_hist.SetMinimum(low * 1.1 if low < 0. else 0.)
-        axis_hist.SetMaximum(high * 1.1 if high > 2. else 2.)
+        # Display limits only: retain every weighted ratio point in the graph.
+        axis_hist.SetMinimum(0.)
+        axis_hist.SetMaximum(2.)
         axis_hist.GetXaxis().SetTitle(panel[2])
-        axis_hist.GetYaxis().SetTitle("Private / Central")
+        axis_hist.GetYaxis().SetTitle("")
         for axis in (axis_hist.GetXaxis(), axis_hist.GetYaxis()):
             axis.SetTitleSize(0.125)
             axis.SetLabelSize(0.108)
         axis_hist.GetXaxis().SetTitleOffset(0.92)
         axis_hist.GetXaxis().SetLabelOffset(0.015)
         axis_hist.GetXaxis().SetNdivisions(510)
-        axis_hist.GetYaxis().SetTitleOffset(0.55)
         axis_hist.GetYaxis().SetNdivisions(505)
         if panel[0] == "n_jets":
             for b in range(1, axis_hist.GetNbinsX()):
@@ -450,6 +467,8 @@ def draw_plots(root, central_histograms, private_histograms, label, output, appl
         line.SetLineWidth(2)
         line.Draw()
         ratio.Draw("P SAME")
+        keep.append(draw_y_title(root, bottom, "Private / Central",
+                                 "hj_y_title_ratio_" + str(index)))
         keep.extend((axis_hist, line, ratio))
         bottom.RedrawAxis()
     output.parent.mkdir(parents=True, exist_ok=True)

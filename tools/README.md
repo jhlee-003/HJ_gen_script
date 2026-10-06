@@ -38,10 +38,13 @@ Rerunning replaces the corresponding PNG; generated PNGs are ignored by Git.
 The no-selection entry point imports the shared implementation in the selected
 plotter, so their file discovery, weighting, and rendering cannot drift apart.
 
-The layout follows the supplied comparison script: red Central and blue Private
-line histograms, weighted error bars, legends with unweighted entry counts, a
+The layout follows the supplied comparison script: red ggH_qme (central) and
+blue HJ (private) line histograms, weighted error bars, legends with unweighted
+entry counts in a separate non-overlapping column, a
 CMS Private Work label and 13.6 TeV in each panel, and a Private/Central ratio
-pad with a dashed line at one. There is **no global title, event-summary banner,
+pad with a dashed line at one. Each panel's sample label is “2022 ggF signal
+sample” for a private directory named 2022. Upper and ratio y-axis titles share
+one horizontal anchor and pixel font size. There is **no global title, event-summary banner,
 or bottom selection/explanation text**. Selection details belong in this README
 and processing counts are printed to the terminal. No DY truth-matching
 requirements or data definitions from the reference script were adopted.
@@ -116,8 +119,9 @@ selection; the range is not a cut. The last jet bin means at least nine jets.
 
 The ratio is the normalized Private shape divided by the normalized Central
 shape, with independent weighted-bin error propagation. Zero Central bins
-are omitted, not drawn as zero ratios. Signed bins are retained. The reference
-ratio range is 0–2 and expands if needed to show outlying/signed ratio points.
+are omitted, not drawn as zero ratios. Signed bins are retained. Every ratio
+pad uses the fixed range 0–2: outlying points or error bars are clipped in the
+image only, without changing bin contents, weights, normalization, or ratios.
 Errors are diagnostic per-bin statistical errors; they do not include
 normalization-induced bin correlations or systematic uncertainties.
 

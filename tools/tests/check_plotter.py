@@ -56,6 +56,34 @@ def write_file(path, rows):
     output.Close()
 
 
+original_canvas_close = ROOT.TCanvas.Close
+checked_canvases = []
+
+
+def check_canvas_format(canvas):
+    """Inspect actual rendered objects before ROOT closes the canvas."""
+    for index in range(1, 11):
+        cell = canvas.GetPad(index)
+        top = cell.GetPrimitive("hj_top_" + str(index))
+        bottom = cell.GetPrimitive("hj_ratio_" + str(index))
+        axes = bottom.GetPrimitive("hj_ratio_axes_" + str(index))
+        assert axes.GetMinimum() == 0. and axes.GetMaximum() == 2.
+        upper_title = top.GetPrimitive("hj_y_title_top_" + str(index))
+        ratio_title = bottom.GetPrimitive("hj_y_title_ratio_" + str(index))
+        assert upper_title.GetX() == ratio_title.GetX() == 0.065
+        assert upper_title.GetTextSize() == ratio_title.GetTextSize()
+        assert ratio_title.GetTextSize() == 20. and ratio_title.GetY() == 0.60
+        assert upper_title.GetTextFont() == ratio_title.GetTextFont() == 43
+        legends = [p for p in top.GetListOfPrimitives() if p.InheritsFrom("TLegend")]
+        assert len(legends) == 3
+        labels = [entry.GetLabel() for legend in legends for entry in legend.GetListOfPrimitives()]
+        assert "Synthetic ggF signal sample" in labels
+        assert " ggH_qme (central)" in labels and " HJ (private)" in labels
+        assert legends[1].GetX2NDC() < legends[2].GetX1NDC()
+    checked_canvases.append(canvas.GetName())
+    original_canvas_close(canvas)
+
+
 def main():
     rows = [
         event(weight=2.),
@@ -129,7 +157,14 @@ def main():
             ROOT, [str(central_file)], sample_name="central_selected")
         assert abs(central_counts[3] - 3. * counts[3]) < 1.e-10
         output = repo / "plots/HJ_synthetic_test_central_vs_private_selected.png"
-        plotter.draw_plots(ROOT, central_histograms, histograms, "Synthetic", output)
+        # Stress the count column with production-scale text, without changing
+        # the small synthetic histograms' bin contents or sumw2 errors.
+        for hist in central_histograms:
+            hist.SetEntries(10_234_567)
+        for hist in histograms:
+            hist.SetEntries(1_000_100)
+        with patch.object(ROOT.TCanvas, "Close", check_canvas_format):
+            plotter.draw_plots(ROOT, central_histograms, histograms, "Synthetic", output)
         assert output.stat().st_size > 10_000
         assert all(abs(h.Integral() - 1.) < 1.e-10 for h in histograms)
         assert leading.GetBinContent(leading.GetNbinsX()) > 0.
@@ -143,7 +178,13 @@ def main():
         assert abs(raw_counts[3] - 7.75) < 1.e-10
         assert raw_histograms[4].GetBinContent(raw_histograms[4].FindBin(5)) == 2.
         raw_output = repo / "plots/HJ_synthetic_test_central_vs_private_no_selection.png"
-        plotter.draw_plots(ROOT, raw_central, raw_histograms, "Synthetic", raw_output, False)
+        for hist in raw_central:
+            hist.SetEntries(10_234_567)
+        for hist in raw_histograms:
+            hist.SetEntries(1_000_100)
+        with patch.object(ROOT.TCanvas, "Close", check_canvas_format):
+            plotter.draw_plots(ROOT, raw_central, raw_histograms, "Synthetic", raw_output, False)
+        assert len(checked_canvases) == 2
         assert raw_output.stat().st_size > 10_000
         assert all(abs(h.Integral() - 1.) < 1.e-10 for h in raw_histograms)
         # Each cut is disabled in the raw version; OS same-flavor and existence
