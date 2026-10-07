@@ -1,229 +1,139 @@
-# NanoAOD -> nano2pico -> H-to-Zgamma baseline (lxplus)
+# NanoAOD to baseline pico on lxplus
 
-This workflow uses the existing checkout at
-`/afs/cern.ch/user/j/junhyuk/nano2pico_sequoia_v1`. It prepares a normal CERN
-HTCondor DAG; it does not use UCSB's `auto_submit_jobs.py`, modify the physics
-sources, submit jobs automatically, or modify the NanoAOD generation/plotters.
-All workflow sources and generated campaign files live under `tools/baseline`.
+The workflow follows the working DY structure, without truth matching:
+
+| File | Role |
+| --- | --- |
+| `setup_runtime.sh` | Load CMSSW_15_0_17 / el9_amd64_gcc12 and the existing nano2pico paths. |
+| `submit_baseline.sh` | Choose inputs, calculate sample-wide normalization once, prepare one job per file, optionally submit. |
+| `baseline.sub` | Condor resources, input transfer, AFS logs and successful pico transfer to EOS. |
+| `run_baseline.sh` | Stage one file, run process_nano directly, select baseline events, save the pico. |
+
+All generated lists, normalization JSONs, submit files and logs are under
+`tools/baseline/runs/CAMPAIGN/SAMPLE/`. No DAG, tarball packaging, checkout
+hash guards, provenance records, timestamp labels or extra Python worker.
 
 ## Inputs and outputs
 
-| Sample | Input discovery | Final baseline pico directory |
+Only 2022 is configured. There is no Condor-cluster filtering.
+
+| Sample | Inputs | Output |
 | --- | --- | --- |
-| HJ | ALL top-level `.root` files in `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022` | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico` |
-| ggH (central) | ALL `.root` files at maxdepth 2 under `/eos/cms/store/mc/Run3Summer22NanoAODv12/GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2` | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH2022pico` |
+| HJ | All top-level ROOT files in `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022` (maxdepth 1) | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico` |
+| ggH | All ROOT files at maxdepth 2 under `/eos/cms/store/mc/Run3Summer22NanoAODv12/GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2` | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH2022pico` |
 
-No Condor-cluster filtering is applied. `maxdepth 2` includes the dataset root
-and its immediate child directories, not deeper directories or `logs/` in HJ.
-Neither input sample is copied to AFS. Each conversion job stages ONE NanoAOD
-into worker scratch, runs the converter, filters the raw pico, and transfers
-only the baseline pico to EOS. Raw picos stay in worker scratch and disappear
-with the job sandbox. No merge or branch slimming is performed.
+Discovery requires the EOS mounts on lxplus. Condor stages input files over
+XRootD into worker scratch. UUID filenames get a local parser-compatible
+dataset/year alias; the original files on EOS are not renamed.
 
-## Physics definition
+Only the final baseline pico is transferred to EOS. NanoAODs and raw picos
+are temporary scratch files. stdout/stderr are streamed to AFS so failed
+jobs still have useful logs.
 
-The [upstream README](https://github.com/richstu/nano2pico/blob/htozgamma_sequoia_v1/README.md)
-describes conversion, normalization, skimming, and optional slimming. Its `llg`
-skim only requires `nll >= 1 && nphoton > 0`, NOT the full baseline.
+## Baseline and normalization
 
-We convert without `--skim` or `--nent`, then select the baseline encoded by
-[`src/zgamma_producer.cpp`](https://github.com/richstu/nano2pico/blob/1403ed07a4220457a6dbd7a218b98a10c081e6e5/src/zgamma_producer.cpp):
-
-* Reconstructed OS same-flavor dilepton and selected photon, using nano2pico's
-  object definitions, corrections, and candidate reconstruction.
-* Relevant electron/muon triggers AND their lepton-pT turn-on requirements.
-* `80 <= m(ll) <= 100 GeV`.
-* `pT(gamma) / m(llgamma) >= 15/110`.
-* `m(ll) + m(llgamma) > 185 GeV`.
-* `100 <= m(llgamma) <= 180 GeV`.
-* Event filters (`pass`).
-
-The shared implementation is:
+The [nano2pico README](https://github.com/richstu/nano2pico/blob/htozgamma_sequoia_v1/README.md#higgs-to-z-gamma-related-variables)
+and working DY workflow use:
 
 ```text
-nll >= 1 && nphoton >= 1 &&
-(zg_cutBitMap & 2558) == 2558 && (zg_cutBitMap & 1536) != 0
+use_event && (zg_cutBitMap==3582 || zg_cutBitMap==3583 ||
+              zg_cutBitMap==3070 || zg_cutBitMap==3071)
 ```
 
-Bits 11 and 8..1 must be set; either channel bit 10 (ee) or 9 (mumu) must
-be set. Bit 0 is the data-blinding flag and is deliberately NOT required for
-these MC samples: the 120--130 GeV Higgs region remains. No ggF category,
-BDT, or other category-specific cuts are applied; ggF production is not the
-same thing as the ggF reconstructed category. All pico branches, including
-weights and systematic variations, are retained; acceptance is nominal only.
+Both states of the data-blinding bit are accepted, retaining the Higgs mass
+region for MC. No truth matching, category/BDT selection, merging or branch
+slimming is added. All existing pico branches and weights are retained.
+Conversion uses `--nent -1`, without `--skim`.
 
-The source SHA256 is checked against the reviewed branch implementation.
-If your checkout differs, preparation stops; do not bypass this by changing
-the hash without reviewing the baseline definition. The manifest records the
-actual checkout revision, source and binary hashes, and dirty status.
+Before submission, normalization reads the Runs metadata of ALL discovered
+files in each sample separately, including for a one-file pilot. It sums the
+signed `genEventSumw` and the nine `LHEScaleSumw` entries in the same schema
+as upstream `find_normalization.py`. Missing, nonfinite, zero or non-nine
+metadata stops preparation. Workers use these shared sums via `--norm`;
+they only adapt the directory key required by process_nano.
 
-Normalization uses ALL discovered files in each sample independently, even
-for a one-file pilot or `--skip-existing`. It reproduces the schema and sums
-from upstream `scripts/find_normalization.py`: `genEventSumw` and nine
-`LHEScaleSumw` sums over every Runs entry. Missing, nonfinite, zero, or
-non-nine LHE scale metadata is an error, not an assumed default. Never
-normalize using only baseline-passing events. This preserves upstream weight
-behavior; it is not a new prescription for LHE uncertainty normalization.
-Before using `weight` for yield/systematics studies, review upstream's ggF
-NNLO reweighting and scale-weight conventions for the private MiNNLO sample.
-The baseline selection itself does not depend on these event weights.
+For yield/systematics analysis, review upstream's Higgs NNLO reweighting and
+LHE weight conventions for MiNNLO; this workflow preserves upstream behavior.
 
-## 1. Build once with a matching runtime
+## Setup once
 
-The upstream `set_env.sh` and `SConstruct` assume UCSB and SL7 dependencies.
-Our helper bypasses `set_env.sh`, but does not rewrite `SConstruct`: it uses
-the matching `slc7_amd64_gcc12` / `CMSSW_14_2_2` runtime and correctionlib
-2.6.4. This is the **analysis runtime**, not the generation runtime.
-Condor workers use the corresponding CC7 container. Do not build with a
-different ROOT/CMSSW runtime and then mix it with this worker configuration.
-
-On lxplus, enter CMS's CC7 container:
-
-```bash
-/cvmfs/cms.cern.ch/common/cmssw-cc7
-```
-
-Inside it:
+Run on normal lxplus, not an EosSubmit-only schedd. The existing checkout is
+`/afs/cern.ch/user/j/junhyuk/nano2pico_sequoia_v1`; use its intended
+`htozgamma_sequoia_v1` sources. The setup uses your existing CMSSW project
+and SCons installation.
 
 ```bash
 cd ~/HJ_gen_script/tools/baseline
 source setup_runtime.sh
-
-# Only if scons is not installed in this Python environment:
-python3 -m pip install --user scons
-
-bash build_nano2pico.sh
-exit
+cd "$NANO2PICO_DIR"
+scons -j2
+cd ~/HJ_gen_script/tools/baseline
 ```
 
-The helper builds the existing checkout; it does not clone, pull, or switch
-its branch. Ensure the checkout contains the intended
-`htozgamma_sequoia_v1` physics sources before building. If it was already built
-in this exact runtime and sources have not changed, skip the build. Preparation
-packages the real ELF binary (not the kernel-dependent `run/` shell launcher)
-and `data/` directory. If multiple kernel builds exist, use `--binary` to
-select `.../kernel/<build-kernel>/run/process_nano.exe` explicitly.
+Skip the build if the current sources are already built in this runtime.
+Like DY, the worker calls the existing `run/process_nano.exe` directly and
+runs from the checkout to find correction data. Keep this checkout and the
+baseline helper files unchanged while jobs are queued/running. If the
+launcher cannot find a build on a worker, its stderr will report that error;
+this workflow does not package or rebuild the converter per job.
 
-## 2. Proxy on AFS
+## Proxy
 
-Run on the normal lxplus host. Do not use an EosSubmit-only schedd: workflow
-inputs and DAG logs are on AFS, while successful pico outputs use the XRootD
-plugin via `output_destination`.
+Use an AFS path, never a login node's `/tmp`:
 
 ```bash
 mkdir -p "$HOME/tmp"
 chmod 700 "$HOME/tmp"
 export X509_USER_PROXY="$HOME/tmp/x509up"
 voms-proxy-init --voms cms --valid 168:00 --out "$X509_USER_PROXY"
-voms-proxy-info --file "$X509_USER_PROXY" --timeleft
 ```
 
-Do not use `/tmp/x509up_*`: the remote schedd cannot read the login host's
-local `/tmp`. Preparation embeds the resolved AFS proxy path in submit files;
-renew the proxy at that same path before it expires. Do not commit a proxy.
+Export this same path in every submitting shell, and renew it there before
+expiry. Preparation requires at least 30 minutes remaining; for production,
+ensure the lifetime covers queue time and execution.
 
-## 3. Prepare a one-file pilot for EACH sample
+## Prepare, dry-run, submit
+
+Syntax: `bash submit_baseline.sh YEAR HJ|ggH|both CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]`.
+Without a flag, it only prepares. Each invocation needs a new campaign name.
 
 ```bash
 cd ~/HJ_gen_script/tools/baseline
-python3 prepare_baseline.py 2022 --sample both --campaign pilot_2022 --limit 1
-cd runs/pilot_2022
-```
 
-Preparation lists the EOS inputs, creates the requested output directories
-and their `logs/` subdirectories, snapshots the converter/helpers, and writes
-`manifest.json`, two normalization submit files, two conversion submit files,
-and `workflow.dag`. It does NOT submit. Each sample gets one normalization
-parent job; conversion+baseline child jobs start only after its normalization
-JSON has returned successfully to the campaign directory.
+# One-file pilot for each sample; normalize using all input files.
+bash submit_baseline.sh 2022 both pilot_2022 1 --dry-run
 
-Basic checks before submitting:
-
-```bash
-condor_submit -dry-run normalization_HJ.classad normalize_HJ.sub
-condor_submit -dry-run normalization_ggH.classad normalize_ggH.sub
-condor_submit_dag -no_submit workflow.dag
-```
-
-`-no_submit` checks DAG generation, not EOS I/O or physics execution. Conversion
-submit files depend on normalization JSONs that do not exist until the parent
-jobs complete; do not create dummy normalization files just to dry-run them.
-
-Then submit the pilot:
-
-```bash
-condor_submit_dag -maxjobs 100 workflow.dag
+# Submit those already-prepared jobs, without repeating normalization.
+condor_submit runs/pilot_2022/HJ/baseline.sub
+condor_submit runs/pilot_2022/ggH/baseline.sub
 condor_q
 ```
 
-The pilot has four execution jobs (two normalizations + one conversion per
-sample), plus DAGMan. Even the pilot normalizes all inputs. The output names
-are deterministic, `pico_baseline_HJ2022_<input-hash>.root` and
-`pico_baseline_ggH2022_<input-hash>.root`, not new timestamps/cluster IDs.
-Original UUID/source filenames are recorded in `baseline_provenance`.
-
-## 4. Full production after the pilot succeeds
+A dry-run validates submit syntax, not the converter, EOS I/O or physics.
+Check the two real pilot jobs before proceeding.
 
 ```bash
-cd ~/HJ_gen_script/tools/baseline
-python3 prepare_baseline.py 2022 --sample both --campaign production_2022 --skip-existing
-cd runs/production_2022
-condor_submit_dag -maxjobs 100 workflow.dag
+# Full samples: one conversion+baseline job for every discovered file.
+bash submit_baseline.sh 2022 both production_2022 --submit
 ```
 
-Omit `--limit` for all files. `--skip-existing` avoids regenerating pilot
-outputs, but normalization still includes them. Preparation otherwise refuses
-existing final filenames. Do not submit duplicate/concurrent campaigns for
-the same inputs: they have the same EOS output names. The input set is frozen
-in the manifest; adding more NanoAODs changes global normalization, so outputs
-from different input sets should not be mixed without renormalization.
-`--sample HJ` or `--sample ggH` processes just one sample. Only 2022 is configured.
+Preparation refuses an output directory that already contains ROOT files.
+Archive/remove pilot outputs before full production, or edit the output
+directory constants to fresh paths. Do not submit overlapping campaigns
+for the same sample/output path. No existing pico is skipped or overwritten.
 
-## Monitoring and validation
+For a failed job, inspect `runs/CAMPAIGN/SAMPLE/logs/baseline_CLUSTER.PROC.err`
+and `condor_q -hold -af ClusterId ProcId HoldReasonCode HoldReason`.
+After fixing a transient issue, release the held job using its exact ID;
+do not rerun preparation into an existing campaign. To retry under changed
+code, remove the old jobs and prepare a fresh campaign/output set.
 
-Scheduler `.log` files and successful normalization stdout/stderr are under
-`runs/<campaign>/logs` on AFS. Successful conversion stdout/stderr go into
-`logs/` under the respective EOS pico directory. Worker stdout/stderr are
-combined in the `.out` log. On a worker failure the wrapper explicitly uploads
-`logs/baseline_failure_<sample>_<mode>_<task>_<cluster.proc>.log` to that sample's
-EOS pico directory. This is best-effort: proxy/network or runtime-setup failures
-can prevent uploading diagnostics. Failed jobs are held on their nonzero exit
-code, without attempting to transfer a nonexistent pico:
+## Offline checks
 
 ```bash
-condor_q -hold -af ClusterId ProcId HoldReasonCode HoldReason ExitCode
-# While a worker is still running, stream its combined stdout:
-condor_tail CLUSTER.PROCESS
+for script in tools/baseline/*.sh; do bash -n "$script" || exit; done
+python3 tools/baseline/tests/test_baseline.py
 ```
 
-For an exited/held worker, read the failure log in the appropriate EOS `logs/`
-directory. No automatic retries are configured. Inspect the actual error; do not release
-a completed/transfer-failed job blindly and accidentally regenerate its output.
-DAGMan rescue files support resuming incomplete nodes once failures are resolved.
-
-A valid zero-entry output is allowed if no events pass. Workers check that
-raw pico entries match NanoAOD entries, that saved entries match the baseline
-count, and that every saved event passes the same baseline. On lxplus, inspect
-an actual final file with a compatible ROOT environment:
-
-```bash
-root -l '/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico/ACTUAL_OUTPUT.root'
-```
-
-At the ROOT prompt:
-
-```cpp
-auto t = (TTree*)_file0->Get("tree");
-t->GetEntries();
-t->GetEntries("nll >= 1 && nphoton >= 1 && (zg_cutBitMap & 2558) == 2558 && (zg_cutBitMap & 1536) != 0");
-((TNamed*)_file0->Get("baseline_provenance"))->GetTitle();
-```
-
-The two entry counts must agree. This confirms baseline membership, not a
-complete physics validation or a cross-section/weighting validation.
-
-Local tests (standard Python; PyROOT tests run additionally when available):
-
-```bash
-python3 tests/test_baseline.py
-```
+ROOT-dependent tests skip if PyROOT is unavailable. These checks do not submit
+jobs or access CERN services; an lxplus pilot is still required.

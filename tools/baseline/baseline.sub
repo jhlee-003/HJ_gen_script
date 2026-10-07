@@ -1,0 +1,31 @@
+# submit_baseline.sh supplies YEAR, SAMPLE, HELPER_DIR, RUN_DIR,
+# OUTPUT_DESTINATION and a jobs.tsv queue.
+universe = vanilla
+executable = $(HELPER_DIR)/run_baseline.sh
+arguments = $(YEAR) $(source_name) $(nano_name) $(pico_name) normalization.json
+initialdir = $(RUN_DIR)
+output = $(RUN_DIR)/logs/baseline_$(ClusterId).$(ProcId).out
+error = $(RUN_DIR)/logs/baseline_$(ClusterId).$(ProcId).err
+log = $(RUN_DIR)/logs/cluster_$(ClusterId).log
+stream_output = True
+stream_error = True
+getenv = True
+
+request_cpus = 1
+request_memory = 4000MB
+request_disk = 20000MB
++JobFlavour = "tomorrow"
++JobBatchName = "baseline_$(SAMPLE)_$(YEAR)"
++SingularityImage = "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/cmssw/el9:x86_64"
+
+should_transfer_files = YES
+transfer_executable = False
+transfer_input_files = $(source_url),$(RUN_DIR)/normalization.json
+transfer_output_files = $(pico_name)
+output_destination = $(OUTPUT_DESTINATION)
+when_to_transfer_output = ON_SUCCESS
+success_exit_code = 0
+on_exit_hold = (ExitBySignal == true) || (ExitCode != 0)
+use_x509userproxy = True
+x509userproxy = $ENV(X509_USER_PROXY)
+notification = Never
