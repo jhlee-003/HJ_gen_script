@@ -1,0 +1,32 @@
+{
+  "nano2pico_dir": "/afs/cern.ch/user/j/junhyuk/nano2pico_sequoia_v1",
+  "upstream_ref": "htozgamma_sequoia_v1",
+  "reviewed_commit": "1403ed07a4220457a6dbd7a218b98a10c081e6e5",
+  "zgamma_source_sha256": "465b8e7b693dee73f16af13d8e197a6363bcf2e2537b33b2904a315b53786fe3",
+  "cmssw_version": "CMSSW_14_2_2",
+  "scram_arch": "slc7_amd64_gcc12",
+  "correctionlib_dir": "/cvmfs/cms.cern.ch/slc7_amd64_gcc12/external/py3-correctionlib/2.6.4-b0957bf077f48ecce521a0a7ef6562c4/lib/python3.9/site-packages/correctionlib/lib",
+  "container_image": "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/cmssw/cc7:x86_64",
+  "request_cpus": 1,
+  "request_memory_mb": 4000,
+  "request_disk_mb": 20000,
+  "job_flavour": "tomorrow",
+  "years": {
+    "2022": {
+      "HJ": {
+        "input_dir": "/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022",
+        "input_host": "root://eosuser.cern.ch",
+        "maxdepth": 1,
+        "dataset": "GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powhegMiNNLO-pythia8",
+        "output_dir": "/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico"
+      },
+      "ggH": {
+        "input_dir": "/eos/cms/store/mc/Run3Summer22NanoAODv12/GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2",
+        "input_host": "root://eoscms.cern.ch",
+        "maxdepth": 2,
+        "dataset": "GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8",
+        "output_dir": "/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH2022pico"
+      }
+    }
+  }
+}
