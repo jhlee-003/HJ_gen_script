@@ -15,8 +15,8 @@ from unittest.mock import patch
 import ROOT
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import plot_pico_kinematics as plotter
-from plot_pico_kinematics import normalize_histogram, make_ratio
+import plot_ggF_BDT_var as plotter
+from plot_ggF_BDT_var import normalize_histogram, make_ratio
 
 ROOT.PyConfig.IgnoreCommandLineOptions = True
 ROOT.gROOT.SetBatch(True)
@@ -210,7 +210,7 @@ def main():
         assert math.isclose(jet_hist.Integral(), 1.)
 
         # Validate main's automatic routes, no extra CLI arguments or selection.
-        with patch.object(sys, "argv", ["plot_pico_kinematics.py", "2022"]), \
+        with patch.object(sys, "argv", ["plot_ggF_BDT_var.py", "2022"]), \
              patch.object(plotter, "list_pico_files", return_value=(files, "unused")) as discovery, \
              patch.object(plotter, "draw_plots") as draw, redirect_stdout(io.StringIO()):
             plotter.main()
@@ -219,7 +219,7 @@ def main():
         assert all(not item.kwargs for item in discovery.call_args_list)
         assert draw.call_count == 3
         for page, call in enumerate(draw.call_args_list, start=1):
-            assert call.args[4].name == "HJ_2022_pico_central_vs_private_{}.png".format(page)
+            assert call.args[4].name == "ggF_BDT_var_2022_{}.png".format(page)
             assert call.args[4].parent == Path(__file__).resolve().parents[3] / "plots"
             start, stop = ((0, 8), (8, 16), (16, 19))[page - 1]
             assert call.kwargs["panels"] == plotter.PANELS[start:stop]
@@ -250,6 +250,9 @@ def main():
                 assert legends[0].GetX1NDC() == 0.24
                 assert legends[1].GetX2NDC() == 0.895
                 assert legends[0].GetY2NDC() == legends[1].GetY2NDC() == 0.88
+                assert legends[0].GetY1NDC() == legends[1].GetY1NDC() == 0.72
+                assert all(math.isclose(legend.GetTextSize(), 0.060, rel_tol=1.e-6)
+                           for legend in legends)
                 assert legends[0].GetX2NDC() <= legends[1].GetX1NDC()
                 assert legends[1].GetTextAlign() == 32
                 labels = [entry.GetLabel() for legend in legends for entry in legend.GetListOfPrimitives()]
@@ -264,7 +267,7 @@ def main():
         start = 0
         for page, group in enumerate(plotter.PLOT_GROUPS, start=1):
             stop = start + len(group)
-            output = Path("/tmp/HJ_pico_synthetic_check_{}.png".format(page))
+            output = Path("/tmp/ggF_BDT_var_synthetic_check_{}.png".format(page))
             with patch.object(ROOT.TCanvas, "Close", inspect_canvas):
                 plotter.draw_plots(ROOT, central[start:stop], private[start:stop], "2022", output,
                                    event_counts={"Central": summary["counts"][start:stop],
@@ -273,7 +276,7 @@ def main():
             start = stop
         ratio = make_ratio(ROOT, private[0], central[0])
         assert all(math.isclose(ratio.GetPointY(i), 1.) for i in range(ratio.GetN()))
-        print("Synthetic pico checks passed; previews: /tmp/HJ_pico_synthetic_check_{1,2,3}.png")
+        print("Synthetic pico checks passed; previews: /tmp/ggF_BDT_var_synthetic_check_{1,2,3}.png")
 
 
 if __name__ == "__main__":

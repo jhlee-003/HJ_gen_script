@@ -1,8 +1,39 @@
 # Baseline-pico ggF BDT-input comparison
 
+## Six-variable kinematics plotter
+
+    python3 tools/plotter/plot_ggF_kinematics.py 2022
+
+This separate script creates one `plots/ggF_kinematics_2022.png` with a 3 x 2
+layout and the original taller 600 x 700 pixel panel proportions. It imports
+the shared renderer and year/input routing from `plot_ggF_BDT_var.py`, so keep
+both scripts in this directory. It retains signed stored `weight`, unit-area
+normalization, folded edge bins, 0-2 Private/Central ratios, enlarged legends,
+per-panel `N=` counts, and the black dashed 125 GeV mass reference. No new cuts
+are applied. The input directories are the same as for the BDT plots below.
+
+| Variable | Pico source | Display range | Bins |
+| --- | --- | --- | --- |
+| pT(gamma) | `photon_pt[llphoton_iph[0]]` | 0-200 GeV | 50 |
+| pT(ll) | `ll_pt[llphoton_ill[0]]` | 0-200 GeV | 50 |
+| pT(llgamma) | `llphoton_pt[0]` | 0-200 GeV | 50 |
+| m(ll) | `ll_m[llphoton_ill[0]]` | 50-120 GeV | 35 |
+| m(llgamma) | `llphoton_m[0]` | 100-150 GeV | 50 |
+| NPV | `npv` (total vertices, not `npv_good`) | integer bins 0-99, overflow folded into 99 | 100 |
+
+All candidate indices are bounds-checked. Zero pT/zero vertices are valid;
+invalid or undefined values are omitted only from their own panel. All six
+histograms are filled in one event loop per sample. Only the six-variable
+branch schema is required, not the BDT variables.
+
+Test with `python3 tools/plotter/tests/check_kinematics_plotter.py`; its preview
+is `/tmp/ggF_kinematics_synthetic_check.png`.
+
+## BDT-input plotter
+
 With CMSSW/PyROOT active, run from the repository root:
 
-    python3 tools/plotter/plot_pico_kinematics.py 2022
+    python3 tools/plotter/plot_ggF_BDT_var.py 2022
 
 Only the year is required. Currently 2022 uses all top-level `.root` files in:
 
@@ -18,9 +49,9 @@ sample directories. Add future paths to `SAMPLE_DIRECTORIES`.
 The 19 variables follow Figure 48 in the supplied ggF BDT-input reference PDF,
 read left-to-right and then top-to-bottom:
 
-1. `plots/HJ_2022_pico_central_vs_private_1.png`: eight panels, pT(llgamma)/m(llgamma) through phi, arranged 4 x 2.
-2. `plots/HJ_2022_pico_central_vs_private_2.png`: eight panels, eta(l1) through pT(j1), arranged 4 x 2.
-3. `plots/HJ_2022_pico_central_vs_private_3.png`: three panels, DeltaPhi(Zgamma,j1), system balance, and photon Zeppenfeld, arranged 3 x 1.
+1. `plots/ggF_BDT_var_2022_1.png`: eight panels, pT(llgamma)/m(llgamma) through phi, arranged 4 x 2.
+2. `plots/ggF_BDT_var_2022_2.png`: eight panels, eta(l1) through pT(j1), arranged 4 x 2.
+3. `plots/ggF_BDT_var_2022_3.png`: three panels, DeltaPhi(Zgamma,j1), system balance, and photon Zeppenfeld, arranged 3 x 1.
 
 Each panel has an approximately 3:2 width/height ratio. Existing styling is
 retained: CMS Private Work / 13.6 TeV, red ggH_qme (central), blue HJ (private),
@@ -117,4 +148,4 @@ Synthetic validation (no EOS access):
 Tests cover candidate/flavor indices, float eta and pT ordering, photon energy
 resolution, stored angles, leading good jets, balance, signed weights/errors,
 PDF ranges/binning, empty/malformed inputs, year routing, and all three rendered
-layouts. Previews are `/tmp/HJ_pico_synthetic_check_1.png` through `_3.png`.
+layouts. Previews are `/tmp/ggF_BDT_var_synthetic_check_1.png` through `_3.png`.

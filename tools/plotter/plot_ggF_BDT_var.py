@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compare the 19 ggF BDT-input shapes in baseline-selected HJ/central picos.
 
-Usage: python3 tools/plotter/plot_pico_kinematics.py 2022
+Usage: python3 tools/plotter/plot_ggF_BDT_var.py 2022
 Read ALL top-level ROOT files in the configured HJ/ggH pico directories.
 Use tree/weight, not Events/genWeight; do not apply object or baseline cuts.
 Standalone PyROOT plotting; three PNGs in the reference PDF's order.
@@ -248,7 +248,8 @@ def draw_y_title(root, pad, text, name):
     return title
 
 
-def draw_plots(root, central_histograms, private_histograms, label, output, event_counts, panels=None):
+def draw_plots(root, central_histograms, private_histograms, label, output, event_counts,
+               panels=None, columns=None, panel_size=(900, 600), reference_lines=None):
     """Reference-style overlays and ratio pads, without global title/cut notes."""
     if panels is None:
         panels = PANELS
@@ -262,10 +263,14 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
     root.gStyle.SetCanvasColor(0)
     root.gStyle.SetPadColor(0)
     root.gStyle.SetEndErrorSize(0)
-    columns = min(4, len(panels))
+    if columns is None:
+        columns = min(4, len(panels))
+    if not isinstance(columns, int) or not 1 <= columns <= len(panels):
+        raise ValueError("Invalid plot column count.")
     rows = math.ceil(len(panels) / columns)
-    # The PDF's individual canvases are wider than tall (approximately 3:2).
-    canvas = root.TCanvas("hj_comparison_canvas", "", 900 * columns, 600 * rows)
+    # BDT plots default to the PDF's wider 3:2 panels; other callers can opt
+    # into the original taller kinematic panels without changing the styling.
+    canvas = root.TCanvas("hj_comparison_canvas", "", panel_size[0] * columns, panel_size[1] * rows)
     canvas.Divide(columns, rows, 0.001, 0.001)
     keep = []
     colors = (root.TColor.GetColor("#D62728"), root.TColor.GetColor("#5B88CF"))
@@ -310,18 +315,26 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         central.GetXaxis().SetTitleSize(0.)
         central.Draw("HIST")
         private.Draw("HIST SAME")
+        if reference_lines and panel[0] in reference_lines:
+            x = reference_lines[panel[0]]
+            reference = root.TLine(x, central.GetMinimum(), x, central.GetMaximum())
+            reference.SetLineColor(root.kBlack)
+            reference.SetLineStyle(2)
+            reference.SetLineWidth(2)
+            reference.Draw()
+            keep.append(reference)
         central.Draw("E SAME")
         private.Draw("E SAME")
         keep.append(draw_y_title(root, top, "A.U. / {:g}{}".format(width, unit),
                                  "hj_y_title_top_" + str(index)))
         # Two aligned rows at opposite top corners, without a sample heading.
-        names = root.TLegend(0.24, 0.76, 0.65, 0.88)
-        counts = root.TLegend(0.65, 0.76, 0.895, 0.88)
+        names = root.TLegend(0.24, 0.72, 0.65, 0.88)
+        counts = root.TLegend(0.65, 0.72, 0.895, 0.88)
         for legend in (names, counts):
             legend.SetBorderSize(0)
             legend.SetFillStyle(0)
             legend.SetTextFont(42)
-            legend.SetTextSize(0.040)
+            legend.SetTextSize(0.060)
             legend.SetMargin(0.)
         names.SetMargin(0.11)
         names.AddEntry(central, " ggH_qme (central)", "l")
@@ -538,7 +551,7 @@ def main():
         for page, panels in enumerate(PLOT_GROUPS, start=1):
             stop = start + len(panels)
             output = Path(__file__).resolve().parents[2] / "plots" / (
-                "HJ_" + args.year + "_pico_central_vs_private_" + str(page) + ".png")
+                "ggF_BDT_var_" + args.year + "_" + str(page) + ".png")
             draw_plots(ROOT, samples["Central"][start:stop], samples["Private"][start:stop],
                        args.year, output,
                        event_counts={sample: counts[start:stop] for sample, counts in event_counts.items()},
