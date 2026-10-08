@@ -38,7 +38,7 @@ mkdir -p "$WORK_NANO_DIR" "$N2P_OUT_DIR/raw_pico"
 ln -- "$LOCAL_NANO" "$WORK_NANO_DIR/$NANO_NAME" 2>/dev/null ||
     cp -- "$LOCAL_NANO" "$WORK_NANO_DIR/$NANO_NAME"
 
-# The sample-wide sums do not change: only adapt the JSON directory key to
+# The selected-input sums do not change: only adapt the JSON directory key to
 # this job's --in_dir, as required by process_nano.
 python3 - "$NORMALIZATION" "$WORK_NANO_DIR" "$NANO_NAME" "$WORK_DIR/norm.json" <<'NORM'
 import json

@@ -25,6 +25,6 @@ export NANO2PICO_DIR=/afs/cern.ch/user/j/junhyuk/nano2pico_sequoia_v1
 export PATH="/afs/cern.ch/user/j/junhyuk/.local/bin:$PATH"
 export PYTHONUNBUFFERED=1
 export SET_ENV_PATH="$BASELINE_SCRIPT_DIR/setup_runtime.sh"
-export XrdSecPROTOCOL=gsi
+# Allow XRootD to negotiate authentication (including after EOS redirects).
 unset BASELINE_START_DIR BASELINE_SCRIPT_DIR BASELINE_RUNTIME BASELINE_NOUNSET BASELINE_STATUS
 return 0

@@ -58,8 +58,9 @@ for SAMPLE in "${SAMPLES[@]}"; do
     esac
     RUN_DIR="$HELPER_DIR/runs/$CAMPAIGN/$SAMPLE"
     mkdir -p "$RUN_DIR/logs"
-    # One preparation pass per sample. A pilot limits queued files, NOT the
-    # sample-wide normalization. No NanoAODs are copied to AFS.
+    # One preparation pass per sample. Normalize exactly the files selected
+    # for conversion, using their pre-baseline Runs metadata. No NanoAODs
+    # are copied to AFS.
     python3 - "$YEAR" "$SAMPLE" "$INPUT_DIR" "$INPUT_HOST" "$MAXDEPTH" \
         "$DATASET" "$OUTPUT_DIR" "$RUN_DIR" "$HELPER_DIR" "$LIMIT" <<'PREPARE'
 import hashlib
@@ -92,6 +93,8 @@ sources = [host + "/" + str(path) for path in files]
 if any(any(char.isspace() for char in url) for url in sources):
     raise SystemExit("Input paths with whitespace are not supported")
 print(f"{sample}: found {len(files)} files (maxdepth {depth})", flush=True)
+sources = sources[:int(limit)] if int(limit) else sources
+print(f"{sample}: selected {len(sources)} files for conversion and normalization", flush=True)
 
 sumw, scales, events = 0.0, [0.0] * 9, 0
 for index, url in enumerate(sources, 1):
@@ -127,9 +130,8 @@ weights.update({f"LHEScaleSumw{i}": value for i, value in enumerate(scales)})
 (run / "normalization.json").write_text(json.dumps({"dataset": dataset, "weights": weights}, indent=2) + "\n")
 (run / "inputs.txt").write_text("\n".join(sources) + "\n")
 
-queued = sources[:int(limit)] if int(limit) else sources
 rows = []
-for url in queued:
+for url in sources:
     # A short ID is only for unique filenames, not a provenance/version check.
     file_id = hashlib.sha256(url.encode()).hexdigest()[:20]
     alias = f"{dataset}__Run3Summer22NanoAODv12__130X_mcRun3_2022_realistic_v5__{file_id}.root"

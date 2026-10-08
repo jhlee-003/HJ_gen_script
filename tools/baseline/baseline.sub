@@ -7,8 +7,8 @@ initialdir = $(RUN_DIR)
 output = $(RUN_DIR)/logs/baseline_$(ClusterId).$(ProcId).out
 error = $(RUN_DIR)/logs/baseline_$(ClusterId).$(ProcId).err
 log = $(RUN_DIR)/logs/cluster_$(ClusterId).log
-stream_output = True
-stream_error = True
+# CERN does not permit stdout/stderr streaming. Condor returns these logs
+# to the access point when the job finishes, separate from the EOS pico.
 getenv = True
 
 request_cpus = 1
