@@ -35,6 +35,12 @@ def event():
         "el_eta": [8., -0.7, 0.8], "el_phi": [0., 0.2, 2.],
         "mu_eta": [9.], "mu_phi": [0.], "njet": 2,
         "jet_pt": [500., 45., 80.], "jet_isgood": [False, True, True],
+        "jet_eta": [9., -1.5, 1.2], "jet_phi": [0., -0.8, -2.4],
+        "jet_m": [100., 8., 12.], "photon_pt": [1., 40.],
+        "photon_idmva": [-0.9, 0.8], "photon_energyErr": [100., 2.],
+        "llphoton_psi": [-1.2, 2.], "llphoton_phi": [1.4, 0.],
+        "el_pt": [1., 20., 40.], "mu_pt": [1.],
+        "photon_mht_dphi": [0.2, 2.4], "ht": 200., "mht": 60.,
     }
 
 
@@ -45,9 +51,9 @@ def write_file(path, rows, omit=(), tree_name="tree"):
     for name in plotter.REQUIRED_BRANCHES:
         if name in omit:
             continue
-        if name == "weight":
+        if name in ("weight", "ht", "mht"):
             buffers[name] = array("f", [0.])
-            tree.Branch(name, buffers[name], "weight/F")
+            tree.Branch(name, buffers[name], name + "/F")
         elif name == "njet":
             buffers[name] = array("i", [0])
             tree.Branch(name, buffers[name], "njet/I")
@@ -58,7 +64,7 @@ def write_file(path, rows, omit=(), tree_name="tree"):
             tree.Branch(name, buffers[name])
     for row in rows:
         for name, buffer in buffers.items():
-            if name in ("weight", "njet"):
+            if name in ("weight", "njet", "ht", "mht"):
                 buffer[0] = row[name]
             else:
                 buffer.clear()
@@ -85,18 +91,23 @@ def main():
         with redirect_stderr(io.StringIO()):
             expect_error(SystemExit, "2", plotter.parse_arguments, arguments)
     keys = [panel[0] for panel in plotter.PANELS]
-    assert keys == ["pt_over_mass", "photon_eta", "dr_min", "dr_max", "n_jets",
-                    "leading_jet_pt", "m_llgamma", "cos_Theta", "cos_theta", "pt_llgamma"]
-    ranges = {panel[0]: panel[4:] for panel in plotter.PANELS}
-    assert ranges["m_llgamma"] == (100., 150.)
-    assert ranges["pt_llgamma"] == (0., 200.)
-    assert [panel[3] for panel in plotter.PANELS] == [50, 50, 50, 50, 10, 50, 60, 50, 50, 50]
+    assert keys == ["pt_over_mass", "photon_idmva", "photon_rel_energy_err", "dr_min", "dr_max",
+                    "cos_Theta", "cos_theta", "phi", "lepton1_eta", "lepton2_eta", "photon_eta",
+                    "photon_mht_dphi", "photon_jet_dr", "leading_jet_eta", "leading_jet_mass",
+                    "leading_jet_pt", "llgamma_jet_dphi", "system_balance", "photon_zeppenfeld"]
+    assert [panel[3:] for panel in plotter.PANELS] == [
+        (40, 0., 2.5), (45, 0., 1.), (40, 0.01, 0.25), (35, 0., 3.5), (60, 0., 6.),
+        (40, -1., 1.), (40, -1., 1.), (40, -3.2, 3.2), (40, -2.6, 2.6), (40, -2.6, 2.6),
+        (40, -2.6, 2.6), (40, 0., 3.15), (40, 0.4, 6.), (50, -5., 5.), (50, 0., 40.),
+        (40, 30., 150.), (40, 0., 3.15), (40, 0., 1.), (40, 0., 6.)]
+    assert [len(group) for group in plotter.PLOT_GROUPS] == [8, 8, 3]
 
     electron = event()
     muon = event()
     muon.update(weight=-0.5, llphoton_iph=[0], llphoton_ill=[0],
                 photon_eta=[0.7], photon_phi=[-3.05], ll_i1=[0], ll_i2=[1],
-                ll_lepid=[13], mu_eta=[-0.5, 1.2], mu_phi=[3.05, 0.9])
+                ll_lepid=[13], mu_eta=[-0.5, 1.2], mu_phi=[3.05, 0.9], mu_pt=[50., 25.],
+                photon_pt=[40.], photon_idmva=[0.8], photon_energyErr=[2.], photon_mht_dphi=[2.4])
     nojet = event()
     nojet.update(weight=3., njet=0, jet_isgood=[False] * 3, llphoton_pt=[0.])
     bad_photon = event()
@@ -104,7 +115,7 @@ def main():
     bad_angles = event()
     bad_angles.update(weight=1., llphoton_cosTheta=[float("nan")], llphoton_costheta=[-999.])
     empty = {name: [] for name in plotter.REQUIRED_BRANCHES}
-    empty.update(weight=1., njet=0)
+    empty.update(weight=1., njet=0, ht=0., mht=0.)
     rows = [electron, muon, nojet, bad_photon, bad_angles, empty]
 
     with tempfile.TemporaryDirectory(prefix="hj_pico_plotter_") as tmp:
@@ -133,10 +144,10 @@ def main():
         hist = dict(zip(keys, histograms))
         assert summary["total"] == 6 and summary["event_loops"] == 1
         assert math.isclose(summary["sumw"], 6.75)
-        assert summary["counts"] == (5, 4, 4, 4, 6, 4, 5, 4, 4, 5), summary
-        mass_bin = hist["m_llgamma"].FindBin(125.)
-        assert math.isclose(hist["m_llgamma"].GetBinContent(mass_bin), 5.75)
-        assert math.isclose(hist["m_llgamma"].GetBinError(mass_bin) ** 2, 14.3125)
+        assert summary["counts"] == (5, 4, 4, 4, 4, 4, 4, 5, 5, 5, 4, 4, 3, 4, 4, 4, 4, 5, 3), summary
+        recoil_bin = hist["pt_over_mass"].FindBin(30. / 125.)
+        assert math.isclose(hist["pt_over_mass"].GetBinContent(recoil_bin), 2.75)
+        assert math.isclose(hist["pt_over_mass"].GetBinError(recoil_bin) ** 2, 5.3125)
         # Good jets, not the 500 GeV bad jet; stored candidate, not candidate 1.
         assert hist["leading_jet_pt"].GetBinContent(hist["leading_jet_pt"].FindBin(80.)) == 2.75
         assert hist["leading_jet_pt"].GetBinContent(hist["leading_jet_pt"].GetNbinsX() + 1) == 0.
@@ -146,6 +157,26 @@ def main():
         assert hist["dr_min"].GetBinContent(hist["dr_min"].FindBin(expected_dr)) == 5.5
         # Stored negative-lepton/axis conventions are not recomputed or sign-flipped.
         assert hist["cos_theta"].GetBinContent(hist["cos_theta"].FindBin(0.45)) == 4.75
+        # New observables use the candidate's indices and the highest-pT good jet.
+        expr = (
+            "hjpicoplot::build(llphoton_pt, llphoton_m, llphoton_iph, llphoton_ill, "
+            "photon_eta, photon_phi, ll_i1, ll_i2, ll_lepid, el_eta, el_phi, mu_eta, mu_phi, "
+            "njet, jet_pt, jet_isgood, llphoton_cosTheta, llphoton_costheta, "
+            "photon_pt, photon_idmva, photon_energyErr, llphoton_psi, el_pt, mu_pt, "
+            "jet_eta, jet_phi, jet_m, llphoton_phi, photon_mht_dphi, ht, mht)")
+        # Separate one-row file avoids Range's incompatibility with implicit MT.
+        one = directory / "one.root"
+        write_file(one, [electron])
+        values = ROOT.RDataFrame("tree", str(one)).Define("values", expr)
+        expected = {"photon_idmva": 0.8, "photon_rel_energy_err": 2. / (40. * math.cosh(0.4)),
+                    "phi": -1.2, "lepton1_eta": 0.8, "lepton2_eta": -0.7,
+                    "photon_mht_dphi": 2.4, "leading_jet_eta": 1.2, "leading_jet_mass": 12.,
+                    "leading_jet_pt": 80., "llgamma_jet_dphi": 2.4831853071795864,
+                    "system_balance": 0.3, "photon_zeppenfeld": 0.8,
+                    "photon_jet_dr": math.hypot(0.4 - 1.2, 0.7 + 2.4)}
+        for name, result in expected.items():
+            actual = float(values.Define("check_" + name, "values." + name).Mean("check_" + name).GetValue())
+            assert math.isclose(actual, result, rel_tol=1.e-6, abs_tol=1.e-6), (name, actual, result)
 
         missing = directory / "missing.root"
         write_file(missing, [electron], omit=("llphoton_iph",))
@@ -166,16 +197,16 @@ def main():
         negative.update(weight=-0.5, llphoton_pt=[10.])
         write_file(signed, [positive, negative])
         signed_hists, _ = plotter.book_histograms(ROOT, [str(signed)], "signed")
-        signed_pt = signed_hists[-1]
+        signed_pt = signed_hists[0]
         normalize_histogram(signed_pt)
-        assert signed_pt.GetBinContent(signed_pt.FindBin(10.)) < 0.
+        assert signed_pt.GetBinContent(signed_pt.FindBin(10. / 125.)) < 0.
         assert math.isclose(signed_pt.Integral(), 1.)
         # Check overflow merging, preserved counts and propagated errors.
-        jet_hist = hist["n_jets"].Clone("overflow_test")
+        jet_hist = hist["leading_jet_pt"].Clone("overflow_test")
         entries = jet_hist.GetEntries()
-        jet_hist.Fill(12., 2.)
+        jet_hist.Fill(250., 2.)
         normalize_histogram(jet_hist)
-        assert jet_hist.GetBinContent(11) == 0. and jet_hist.GetEntries() == entries + 1
+        assert jet_hist.GetBinContent(jet_hist.GetNbinsX() + 1) == 0. and jet_hist.GetEntries() == entries + 1
         assert math.isclose(jet_hist.Integral(), 1.)
 
         # Validate main's automatic routes, no extra CLI arguments or selection.
@@ -186,57 +217,63 @@ def main():
         assert [item.args[0] for item in discovery.call_args_list] == [
             plotter.SAMPLE_DIRECTORIES["2022"]["central"], plotter.SAMPLE_DIRECTORIES["2022"]["private"]]
         assert all(not item.kwargs for item in discovery.call_args_list)
-        assert draw.call_args.args[4].name == "HJ_2022_pico_central_vs_private.png"
-        assert draw.call_args.args[4].parent == Path(__file__).resolve().parents[3] / "plots"
-        assert draw.call_args.kwargs["event_counts"] == {
-            "Central": summary["counts"], "Private": summary["counts"]}
+        assert draw.call_count == 3
+        for page, call in enumerate(draw.call_args_list, start=1):
+            assert call.args[4].name == "HJ_2022_pico_central_vs_private_{}.png".format(page)
+            assert call.args[4].parent == Path(__file__).resolve().parents[3] / "plots"
+            start, stop = ((0, 8), (8, 16), (16, 19))[page - 1]
+            assert call.kwargs["panels"] == plotter.PANELS[start:stop]
+            assert call.kwargs["event_counts"] == {
+                "Central": summary["counts"][start:stop], "Private": summary["counts"][start:stop]}
 
         central = [h.Clone("central_" + key) for key, h in zip(keys, histograms)]
         private = [h.Clone("private_" + key) for key, h in zip(keys, histograms)]
-        output = Path("/tmp/HJ_pico_synthetic_check.png")
         original_close = ROOT.TCanvas.Close
         def inspect_canvas(canvas):
-            for index in range(1, 11):
+            columns = min(4, len(group))
+            rows = math.ceil(len(group) / columns)
+            assert math.isclose(canvas.GetWw() / canvas.GetWh(), 1.5 * columns / rows, rel_tol=0.06)
+            assert len(canvas.GetListOfPrimitives()) == len(group)
+            for index in range(1, len(group) + 1):
                 cell = canvas.GetPad(index)
                 top = cell.GetPrimitive("hj_top_" + str(index))
                 bottom = cell.GetPrimitive("hj_ratio_" + str(index))
                 axes = bottom.GetPrimitive("hj_ratio_axes_" + str(index))
                 assert axes.GetMinimum() == 0. and axes.GetMaximum() == 2.
-                assert axes.GetXaxis().GetXmin() == plotter.PANELS[index - 1][4]
-                assert axes.GetXaxis().GetXmax() == plotter.PANELS[index - 1][5]
+                assert axes.GetXaxis().GetXmin() == group[index - 1][4]
+                assert axes.GetXaxis().GetXmax() == group[index - 1][5]
                 titles = [pad.GetPrimitive("hj_y_title_" + kind + "_" + str(index))
                           for pad, kind in ((top, "top"), (bottom, "ratio"))]
                 assert titles[0].GetX() == titles[1].GetX() == 0.065
                 legends = [p for p in top.GetListOfPrimitives() if p.InheritsFrom("TLegend")]
                 assert len(legends) == 2
                 assert legends[0].GetX1NDC() == 0.24
-                assert legends[1].GetX2NDC() == 0.925
+                assert legends[1].GetX2NDC() == 0.895
                 assert legends[0].GetY2NDC() == legends[1].GetY2NDC() == 0.88
-                assert legends[0].GetX2NDC() < legends[1].GetX1NDC()
+                assert legends[0].GetX2NDC() <= legends[1].GetX1NDC()
                 assert legends[1].GetTextAlign() == 32
                 labels = [entry.GetLabel() for legend in legends for entry in legend.GetListOfPrimitives()]
                 assert "2022 ggF signal sample" not in labels
                 assert " ggH_qme (central)" in labels and " HJ (private)" in labels
-                assert labels[-2:] == ["N={:,}".format(summary["counts"][index - 1])] * 2
+                assert labels[-2:] == ["N={:,}".format(summary["counts"][start + index - 1])] * 2
                 assert not any(label.startswith("Jobs=") for label in labels)
                 vertical_lines = [p for p in top.GetListOfPrimitives()
                                   if p.InheritsFrom("TLine") and p.GetX1() == p.GetX2()]
-                assert len(vertical_lines) == (1 if index == 7 else 0)
-                if vertical_lines:
-                    line = vertical_lines[0]
-                    assert line.GetX1() == 125.
-                    assert line.GetLineColor() == ROOT.kBlack and line.GetLineStyle() == 2
-                    assert line.GetY1() == central[index - 1].GetMinimum()
-                    assert line.GetY2() == central[index - 1].GetMaximum()
+                assert not vertical_lines
             original_close(canvas)
-        with patch.object(ROOT.TCanvas, "Close", inspect_canvas):
-            plotter.draw_plots(ROOT, central, private, "2022", output,
-                               event_counts={"Central": summary["counts"], "Private": summary["counts"]},
-                               panels=plotter.PANELS)
-        assert output.is_file() and output.stat().st_size > 0
+        start = 0
+        for page, group in enumerate(plotter.PLOT_GROUPS, start=1):
+            stop = start + len(group)
+            output = Path("/tmp/HJ_pico_synthetic_check_{}.png".format(page))
+            with patch.object(ROOT.TCanvas, "Close", inspect_canvas):
+                plotter.draw_plots(ROOT, central[start:stop], private[start:stop], "2022", output,
+                                   event_counts={"Central": summary["counts"][start:stop],
+                                                 "Private": summary["counts"][start:stop]}, panels=group)
+            assert output.is_file() and output.stat().st_size > 0
+            start = stop
         ratio = make_ratio(ROOT, private[0], central[0])
         assert all(math.isclose(ratio.GetPointY(i), 1.) for i in range(ratio.GetN()))
-        print("Synthetic pico checks passed; preview: " + str(output))
+        print("Synthetic pico checks passed; previews: /tmp/HJ_pico_synthetic_check_{1,2,3}.png")
 
 
 if __name__ == "__main__":

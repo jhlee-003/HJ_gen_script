@@ -1,113 +1,120 @@
-# Baseline-pico kinematic comparison
+# Baseline-pico ggF BDT-input comparison
 
-## Run the plotter
-
-For the already baseline-selected HJ and central ggF picos, run:
+With CMSSW/PyROOT active, run from the repository root:
 
     python3 tools/plotter/plot_pico_kinematics.py 2022
 
-This also takes **only the year**. Currently only 2022 is configured, with:
+Only the year is required. Currently 2022 uses all top-level `.root` files in:
 
 - HJ: `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico`
 - ggH: `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH2022pico`
 
-It reads every top-level `.root` file in each directory through XRootD,
-irrespective of Condor cluster or campaign, without merging/copying inputs.
-Keep duplicate productions and unrelated ROOT files out of these directories.
-Add future year paths to `SAMPLE_DIRECTORIES` in the pico plotter.
+Files are read through XRootD without merging, copying, or filtering by Condor
+cluster. Keep duplicate productions and unrelated ROOT files out of these
+sample directories. Add future paths to `SAMPLE_DIRECTORIES`.
 
-Output: `plots/HJ_2022_pico_central_vs_private.png`. The standalone
-five-column/two-row PNG keeps the same ten variables and appearance. Pico-specific
-display ranges are **100-150 GeV for m(llgamma)** and **0-200 GeV for
-pT(llgamma)**; bin counts and the other eight ranges are unchanged.
-These are display ranges, not additional event cuts; overflow folding and
-unit-integral normalization are retained. It keeps the red/blue labels,
-top-aligned y titles, process legends in the upper-left corner, right-aligned
-`N=` event counts in the upper-right corner, weighted error bars, overflow folding,
-and 0-2 Private/Central ratios. Both legends are inset from the frame, and the
-m(llgamma) overlay has a black dashed vertical reference line at 125 GeV.
-The sample-heading legend is removed. There is no global title
-or bottom explanation. No draw_pico installation/build or other plotting script is required.
+## Three output images
 
-The input is a pico **`tree`**, not a NanoAOD `Events` tree. No object ID,
-isolation, pT/eta, trigger, mass, truth-matching, `use_event`, or bitmap cuts
-are reapplied. The supplied `plot_vars_central_vs_private.py` was used only
-as a reference for pico array/index handling, not its selections, unweighted
-histograms, variables, file discovery, or formatting.
+The 19 variables follow Figure 48 in the supplied ggF BDT-input reference PDF,
+read left-to-right and then top-to-bottom:
 
-### Pico variable mapping
+1. `plots/HJ_2022_pico_central_vs_private_1.png`: eight panels, pT(llgamma)/m(llgamma) through phi, arranged 4 x 2.
+2. `plots/HJ_2022_pico_central_vs_private_2.png`: eight panels, eta(l1) through pT(j1), arranged 4 x 2.
+3. `plots/HJ_2022_pico_central_vs_private_3.png`: three panels, DeltaPhi(Zgamma,j1), system balance, and photon Zeppenfeld, arranged 3 x 1.
 
-Use nominal llgamma candidate index 0, as used by the baseline producer.
-`iph = llphoton_iph[0]`, `ill = llphoton_ill[0]`; the lepton indices are
-`ll_i1[ill]` and `ll_i2[ill]`, with flavor from `ll_lepid[ill]` (11 or 13).
-All indices are checked before dereferencing.
+Each panel has an approximately 3:2 width/height ratio. Existing styling is
+retained: CMS Private Work / 13.6 TeV, red ggH_qme (central), blue HJ (private),
+top-aligned y titles, weighted errors, unit-integral shapes, folded edge bins,
+and 0-2 Private/Central ratios. There is no legend heading, global explanation,
+or bottom note. The event-count legend is shifted slightly left. The old
+m(llgamma), pT(llgamma), and jet-count panels are not part of the PDF's 19-panel
+set, so there is no mass panel or 125 GeV marker in these images.
+Older PNGs are not deleted automatically.
 
-| Existing panel | Pico source |
-| --- | --- |
-| Higgs transverse recoil | `llphoton_pt[0] / llphoton_m[0]` |
-| Photon eta | `photon_eta[iph]`, not necessarily photon index 0 |
-| Nearest photon-lepton separation | Minimum DeltaR to the two indexed candidate leptons |
-| Farthest photon-lepton separation | Maximum DeltaR to those same two leptons |
-| Jet multiplicity | Stored scalar `njet` |
-| Leading-jet pT | Maximum `jet_pt` among stored `jet_isgood` flags, only when `njet > 0` |
-| Dilepton-photon mass | `llphoton_m[0]` (nominal, not the refitted mass) |
-| Z production angle | Stored `llphoton_cosTheta[0]` |
-| Lepton polar angle | Stored `llphoton_costheta[0]` (lowercase theta) |
-| Dilepton-photon pT | `llphoton_pt[0]` |
+## Reference axes and binning
 
-DeltaR uses wrapped delta-phi and the indexed `el_eta/el_phi` or
-`mu_eta/mu_phi` arrays. Do not substitute `photon_drmin`: that branch
-can include leptons outside the chosen pair. Likewise, the pico jet
-collection also contains non-good jets; using the stored flags is not
-a new object selection but follows the producer's nominal jet definition.
-These definitions are checked against the sequoia branch's
-[pico schema](https://github.com/richstu/nano2pico/blob/htozgamma_sequoia_v1/txt/variables/pico),
-[candidate producer](https://github.com/richstu/nano2pico/blob/htozgamma_sequoia_v1/src/zgamma_producer.cpp),
-and [jet producer](https://github.com/richstu/nano2pico/blob/htozgamma_sequoia_v1/src/jetmet_producer.cpp).
+Ranges are display limits, not new event cuts. Values outside them are folded
+into the first/last bins with their weights and errors retained.
 
-**Angle conventions differ from the old NanoAOD helper.** Here both samples
-use nano2pico's stored `CalculateAngles` results unchanged: cosTheta uses
-the producer's beam-derived incoming-parton axis; costheta uses the
-**positive** lepton relative to the photon in the Z rest frame. The old
-NanoAOD plotter uses the laboratory H flight direction and the negative
-lepton. No sign flips or angle reconstruction are added in the pico plotter.
-An angle outside its physical domain (except tiny float round-off),
-a sentinel, a missing index, or a non-finite observable is omitted only
-from its own panel. No-jet events still enter the other nine panels.
-Counts of undefined/no-object values are printed for every panel.
+| Image | Variable | Range | Bins | Bin width |
+| --- | --- | --- | --- | --- |
+| 1 | pT(llgamma)/m(llgamma) | 0 to 2.5 | 40 | 0.0625 |
+| 1 | Photon IDMVA | 0 to 1 | 45 | 0.0222222 |
+| 1 | Photon sigmaE/E | 0.01 to 0.25 | 40 | 0.006 |
+| 1 | min DeltaR(gamma,l) | 0 to 3.5 | 35 | 0.1 |
+| 1 | max DeltaR(gamma,l) | 0 to 6 | 60 | 0.1 |
+| 1 | cosTheta | -1 to 1 | 40 | 0.05 |
+| 1 | costheta | -1 to 1 | 40 | 0.05 |
+| 1 | phi | -3.2 to 3.2 | 40 | 0.16 |
+| 2 | eta(l1) | -2.6 to 2.6 | 40 | 0.13 |
+| 2 | eta(l2) | -2.6 to 2.6 | 40 | 0.13 |
+| 2 | eta(gamma) | -2.6 to 2.6 | 40 | 0.13 |
+| 2 | DeltaPhi(HmissT,gamma) | 0 to 3.15 | 40 | 0.07875 |
+| 2 | DeltaR(gamma,j1) | 0.4 to 6 | 40 | 0.14 |
+| 2 | eta(j1) | -5 to 5 | 50 | 0.2 |
+| 2 | m(j1) [GeV] | 0 to 40 | 50 | 0.8 GeV |
+| 2 | pT(j1) [GeV] | 30 to 150 | 40 | 3 GeV |
+| 3 | DeltaPhi(Zgamma,j1) | 0 to 3.15 | 40 | 0.07875 |
+| 3 | System balance | 0 to 1 | 40 | 0.025 |
+| 3 | Photon Zeppenfeld | 0 to 6 | 40 | 0.15 |
 
-### Pico weights and checks
+## Pico definitions
 
-Use the signed, stored pico **`weight`** branch, which already includes
-luminosity/generator normalization and the correction factors produced
-by nano2pico. Do not multiply by `genWeight`, `w_lumi`, or those correction
-factors again. Each histogram is independently normalized to unit summed
-weight, not divided by its unweighted event count. The upper-right `N=`
-counts the unweighted events contributing a defined observable to that panel,
-including events folded into the edge bins. For example, the leading-jet
-panel excludes events without a good jet, while other panels can retain them.
-It is not a file/job count or an expected yield. These counts are also printed
-per panel in the terminal.
-Negative weights and sum-of-squared-weight errors are retained.
+Use `tree`, not NanoAOD `Events`. No object ID, isolation, pT/eta, trigger,
+mass-window, truth matching, `use_event`, bitmap, or ggF-category cuts are
+reapplied. Candidate zero is nominal: photon index `llphoton_iph[0]`, pair
+index `llphoton_ill[0]`, then `ll_i1[ill]`, `ll_i2[ill]`, and `ll_lepid[ill]`.
+Every index is checked. Undefined/sentinel/non-finite observables are omitted
+only from the affected panel; no-jet events remain in the other panels.
 
-This follows the weighted overlay/shape, overflow, and ratio concepts in
-[draw_pico](https://github.com/richstu/draw_pico#plot-options-explanation),
-while keeping the existing PyROOT renderer and unit-integral convention.
-These are **shape comparisons**, so a common overall normalization cancels;
-the plots do not fix subset yield normalization. The baseline submitter now
-normalizes exactly the selected input files. Older pilot outputs normalized
-to the full input directory must be regenerated before use for subset yields.
+- Recoil: `llphoton_pt[0]/llphoton_m[0]`.
+- Photon IDMVA: `photon_idmva[iph]`.
+- Photon resolution: `photon_energyErr[iph]/(photon_pt[iph]*cosh(photon_eta[iph]))`, i.e. sigmaE/E for a massless photon as labeled in the PDF. This is not sigmaE/pT. The current upstream `ggF_input_plots` code uses pT in the denominator despite the E label; this distinction matters for literal reproduction of a particular upstream curve.
+- Lepton separations: wrapped DeltaR to the two indexed candidate leptons, not other leptons in the event.
+- Angles: stored `llphoton_cosTheta[0]`, `llphoton_costheta[0]`, and `llphoton_psi[0]` (the plotted phi). No sign flips or reconstruction.
+- Lepton eta: sort the candidate's two leptons by stored `el_pt` or `mu_pt`; l1 is higher-pT, l2 lower-pT. Eta remains floating-point.
+- Photon eta and missing-HT DeltaPhi: `photon_eta[iph]`, `photon_mht_dphi[iph]`.
+- Leading jet: highest-pT stored `jet_isgood` jet, requiring a defined jet with `njet > 0`. Eta, phi, mass, and pT refer to that same index. Stored good-jet flags are the producer's definition, not new cuts.
+- Photon-jet DeltaR and Zgamma-jet DeltaPhi: calculated from that jet and the nominal candidate photon/`llphoton_phi[0]`, with wrapped phi differences.
+- System balance: stored `mht/ht`, the magnitude of the vector pT sum divided by the scalar pT sum over nano2pico's signal leptons/photons and good jets. Do not substitute `llphoton_dijet_balance`, which groups different objects.
+- Photon Zeppenfeld in the PDF's single-jet definition: `abs(photon_eta[iph]-jet_eta[j1])`. Do not use the two-jet mean-eta definition in `photon_zeppenfeld` for multi-jet events.
+
+Definitions are checked against the sequoia
+[pico schema](https://github.com/richstu/nano2pico/blob/htozgamma_sequoia_v1/txt/variables/pico)
+and [zgamma producer](https://github.com/richstu/nano2pico/blob/htozgamma_sequoia_v1/src/zgamma_producer.cpp).
+Reference bins are also consistent with the applicable
+[draw_pico histogram definitions](https://github.com/richstu/draw_pico/blob/master/src/zgamma/categorization_utilities.cpp).
+
+## Weights and interpretation
+
+Use the signed stored pico `weight`, which already contains normalization and
+corrections. Do not multiply by `genWeight`, `w_lumi`, or correction factors
+again. Each histogram is independently normalized to unit summed weight;
+negative weights and sum-of-squared-weight errors are retained. Ratios compare
+private/central shapes, not signal/background as in the PDF.
+
+`N=` is the unweighted number of events with a defined value in that panel,
+including events folded into edge bins. It is not a file/job count or an
+expected yield. The same counts and undefined-value counts are printed.
+
+Matching the variables and axes does not guarantee literal reproduction of
+the reference red curve: the PDF combines Run 2/Run 3 and describes ggF signal
+stacked on VBF, with signal normalized to background. This plotter compares
+only your baseline-selected 2022 HJ and central ggH samples, without adding
+those samples, additional selections, or background normalization.
+For yield studies, subset normalization must also be correct; a common
+normalization constant cancels only in these shape plots.
 
 Every file's required branches are checked. Zero-entry files are supported
-inside a non-empty sample. Broken files, entirely empty samples, and
-non-finite stored weights cause explicit errors rather than silent skips.
-Two ROOT threads fill all ten histograms in one event loop per sample.
+inside a nonempty sample. Broken files, entirely empty samples, or non-finite
+weights cause explicit errors. All 19 histograms and counts are booked before
+execution: one event loop per sample, not one per output image.
 
 Synthetic validation (no EOS access):
 
     python3 tools/plotter/tests/check_pico_plotter.py
 
-It tests candidate/flavor indices, the existing good-jet flags, signed
-weights/errors, empty or malformed inputs, angle sentinels, year routing,
-the one-loop requirement, and actual rendered canvas formatting.
-The synthetic preview is written to `/tmp/HJ_pico_synthetic_check.png`.
+Tests cover candidate/flavor indices, float eta and pT ordering, photon energy
+resolution, stored angles, leading good jets, balance, signed weights/errors,
+PDF ranges/binning, empty/malformed inputs, year routing, and all three rendered
+layouts. Previews are `/tmp/HJ_pico_synthetic_check_1.png` through `_3.png`.

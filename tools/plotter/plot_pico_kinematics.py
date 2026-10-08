@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Compare the ten HJ/central ggF kinematic shapes in baseline-selected picos.
+"""Compare the 19 ggF BDT-input shapes in baseline-selected HJ/central picos.
 
 Usage: python3 tools/plotter/plot_pico_kinematics.py 2022
 Read ALL top-level ROOT files in the configured HJ/ggH pico directories.
 Use tree/weight, not Events/genWeight; do not apply object or baseline cuts.
-Standalone PyROOT plotting, with pico-specific mass/pT display ranges.
+Standalone PyROOT plotting; three PNGs in the reference PDF's order.
 """
 
 import argparse
@@ -17,17 +17,27 @@ from urllib.parse import urlsplit
 
 # column, panel title, x-axis label, bin count, lower edge, upper edge
 PANELS = (
-    ("pt_over_mass", "Higgs transverse recoil", "p_{T}(#it{l}#it{l}#gamma)/m_{#it{l}#it{l}#gamma}", 50, 0., 2.),
-    ("photon_eta", "Photon pseudorapidity", "#eta(#gamma)", 50, -2.5, 2.5),
-    ("dr_min", "Nearest photon-lepton separation", "#DeltaR_{min}(#gamma,#it{l})", 50, 0., 6.),
-    ("dr_max", "Farthest photon-lepton separation", "#DeltaR_{max}(#gamma,#it{l})", 50, 0., 6.),
-    ("n_jets", "Jet multiplicity", "N_{jet}", 10, -0.5, 9.5),
-    ("leading_jet_pt", "Leading-jet transverse momentum", "p_{T}(j_{1}) [GeV]", 50, 0., 300.),
-    ("m_llgamma", "Dilepton-photon invariant mass", "m_{#it{l}#it{l}#gamma} [GeV]", 60, 100., 150.),
-    ("cos_Theta", "Z boson production angle", "cos#Theta", 50, -1., 1.),
-    ("cos_theta", "Lepton production polar angle", "cos#theta", 50, -1., 1.),
-    ("pt_llgamma", "Dilepton-photon transverse momentum", "p_{T}(#it{l}#it{l}#gamma) [GeV]", 50, 0., 200.),
+    ("pt_over_mass", "Higgs transverse recoil", "p_{T}(#it{l}#it{l}#gamma)/m_{#it{l}#it{l}#gamma}", 40, 0., 2.5),
+    ("photon_idmva", "Photon identification MVA", "#gamma IDMVA", 45, 0., 1.),
+    ("photon_rel_energy_err", "Photon relative energy uncertainty", "#sigma_{E}(#gamma)/E(#gamma)", 40, 0.01, 0.25),
+    ("dr_min", "Nearest photon-lepton separation", "#DeltaR_{min}(#gamma,#it{l})", 35, 0., 3.5),
+    ("dr_max", "Farthest photon-lepton separation", "#DeltaR_{max}(#gamma,#it{l})", 60, 0., 6.),
+    ("cos_Theta", "Z boson production angle", "cos#Theta", 40, -1., 1.),
+    ("cos_theta", "Lepton production polar angle", "cos#theta", 40, -1., 1.),
+    ("phi", "Lepton production azimuthal angle", "#phi", 40, -3.2, 3.2),
+    ("lepton1_eta", "Leading-lepton pseudorapidity", "#eta(#it{l}_{1})", 40, -2.6, 2.6),
+    ("lepton2_eta", "Subleading-lepton pseudorapidity", "#eta(#it{l}_{2})", 40, -2.6, 2.6),
+    ("photon_eta", "Photon pseudorapidity", "#eta(#gamma)", 40, -2.6, 2.6),
+    ("photon_mht_dphi", "Photon-missing-HT azimuthal separation", "#Delta#phi(H_{T}^{miss},#gamma)", 40, 0., 3.15),
+    ("photon_jet_dr", "Photon-leading-jet separation", "#DeltaR(#gamma,j_{1})", 40, 0.4, 6.),
+    ("leading_jet_eta", "Leading-jet pseudorapidity", "#eta(j_{1})", 50, -5., 5.),
+    ("leading_jet_mass", "Leading-jet mass", "m(j_{1}) [GeV]", 50, 0., 40.),
+    ("leading_jet_pt", "Leading-jet transverse momentum", "p_{T}(j_{1}) [GeV]", 40, 30., 150.),
+    ("llgamma_jet_dphi", "Dilepton-photon-leading-jet azimuthal separation", "#Delta#phi(Z#gamma,j_{1})", 40, 0., 3.15),
+    ("system_balance", "System transverse-momentum balance", "System balance", 40, 0., 1.),
+    ("photon_zeppenfeld", "Photon-leading-jet eta separation", "|#eta(#gamma)-#eta(j_{1})|", 40, 0., 6.),
 )
+PLOT_GROUPS = (PANELS[:8], PANELS[8:16], PANELS[16:])
 
 
 SAMPLE_DIRECTORIES = {
@@ -41,7 +51,9 @@ REQUIRED_BRANCHES = (
     "weight", "llphoton_pt", "llphoton_m", "llphoton_iph", "llphoton_ill",
     "llphoton_cosTheta", "llphoton_costheta", "photon_eta", "photon_phi",
     "ll_i1", "ll_i2", "ll_lepid", "el_eta", "el_phi", "mu_eta", "mu_phi",
-    "njet", "jet_pt", "jet_isgood",
+    "njet", "jet_pt", "jet_isgood", "jet_eta", "jet_phi", "jet_m",
+    "photon_pt", "photon_idmva", "photon_energyErr", "llphoton_psi",
+    "el_pt", "mu_pt", "llphoton_phi", "photon_mht_dphi", "ht", "mht",
 )
 
 CPP_HELPERS = r"""
@@ -59,6 +71,10 @@ struct Values {
     double dr_min = missing(), dr_max = missing(), n_jets = missing();
     double leading_jet_pt = missing(), m_llgamma = missing();
     double cos_Theta = missing(), cos_theta = missing(), pt_llgamma = missing();
+    double photon_idmva = missing(), photon_rel_energy_err = missing(), phi = missing();
+    double lepton1_eta = missing(), lepton2_eta = missing(), photon_mht_dphi = missing();
+    double photon_jet_dr = missing(), leading_jet_eta = missing(), leading_jet_mass = missing();
+    double llgamma_jet_dphi = missing(), system_balance = missing(), photon_zeppenfeld = missing();
 };
 template <typename T> bool has(const RVec<T>& values, int index) {
     return index >= 0 && static_cast<std::size_t>(index) < values.size();
@@ -86,7 +102,13 @@ Values build(const RVec<float>& pt, const RVec<float>& mass,
              const RVec<float>& el_eta, const RVec<float>& el_phi,
              const RVec<float>& mu_eta, const RVec<float>& mu_phi,
              int njet, const RVec<float>& jet_pt, const RVec<bool>& jet_isgood,
-             const RVec<float>& cosTheta, const RVec<float>& costheta) {
+             const RVec<float>& cosTheta, const RVec<float>& costheta,
+             const RVec<float>& photon_pt, const RVec<float>& photon_idmva,
+             const RVec<float>& photon_energyErr, const RVec<float>& psi,
+             const RVec<float>& el_pt, const RVec<float>& mu_pt,
+             const RVec<float>& jet_eta, const RVec<float>& jet_phi,
+             const RVec<float>& jet_m, const RVec<float>& llphoton_phi,
+             const RVec<float>& photon_mht_dphi, double ht, double mht) {
     Values out;
     // Candidate zero is the nominal candidate used by the baseline producer.
     out.pt_llgamma = value(pt, 0);
@@ -96,7 +118,12 @@ Values build(const RVec<float>& pt, const RVec<float>& mass,
     out.pt_over_mass = out.pt_llgamma / out.m_llgamma;
     out.cos_Theta = angle(cosTheta);
     out.cos_theta = angle(costheta);
+    const double psi0 = value(psi, 0);
+    if (std::abs(psi0) <= std::acos(-1.) + 1.e-6) out.phi = psi0;
+    if (std::isfinite(ht) && std::isfinite(mht) && ht > 0. && mht >= 0.)
+        out.system_balance = mht / ht;
     if (njet >= 0) out.n_jets = njet;
+    int leading_index = -1;
     // Use the producer's stored good-jet flags, without new object cuts.
     if (njet > 0 && jet_pt.size() == jet_isgood.size()) {
         double leading = missing();
@@ -104,14 +131,39 @@ Values build(const RVec<float>& pt, const RVec<float>& mass,
         for (std::size_t j = 0; j < jet_pt.size(); ++j) {
             if (!jet_isgood[j]) continue;
             if (!std::isfinite(jet_pt[j]) || jet_pt[j] <= 0.) { invalid = true; break; }
-            if (!std::isfinite(leading) || jet_pt[j] > leading) leading = jet_pt[j];
+            if (!std::isfinite(leading) || jet_pt[j] > leading) {
+                leading = jet_pt[j];
+                leading_index = j;
+            }
         }
         if (!invalid) out.leading_jet_pt = leading;
+        else leading_index = -1;
+    }
+    if (leading_index >= 0) {
+        out.leading_jet_eta = value(jet_eta, leading_index);
+        out.leading_jet_mass = value(jet_m, leading_index);
+        if (out.leading_jet_mass < 0.) out.leading_jet_mass = missing();
+        out.llgamma_jet_dphi = std::abs(std::remainder(
+            value(llphoton_phi, 0) - value(jet_phi, leading_index), 2. * std::acos(-1.)));
     }
     if (iph.empty()) return out;
     const int photon_index = iph[0];
     out.photon_eta = value(photon_eta, photon_index);
     const double gphi = value(photon_phi, photon_index);
+    out.photon_idmva = value(photon_idmva, photon_index);
+    if (std::abs(out.photon_idmva) > 1. + 1.e-6) out.photon_idmva = missing();
+    const double energy = value(photon_pt, photon_index) * std::cosh(out.photon_eta);
+    const double energy_error = value(photon_energyErr, photon_index);
+    if (std::isfinite(energy) && energy > 0. && energy_error >= 0.)
+        out.photon_rel_energy_err = energy_error / energy;
+    const double mht_dphi = value(photon_mht_dphi, photon_index);
+    if (mht_dphi >= 0. && mht_dphi <= std::acos(-1.) + 1.e-6)
+        out.photon_mht_dphi = mht_dphi;
+    if (leading_index >= 0) {
+        out.photon_jet_dr = delta_r(out.photon_eta, gphi,
+                                  out.leading_jet_eta, value(jet_phi, leading_index));
+        out.photon_zeppenfeld = std::abs(out.photon_eta - out.leading_jet_eta);
+    }
     if (ill.empty()) return out;
     const int pair_index = ill[0];
     if (!has(ll_i1, pair_index) || !has(ll_i2, pair_index)
@@ -119,9 +171,15 @@ Values build(const RVec<float>& pt, const RVec<float>& mass,
     const int first = ll_i1[pair_index], second = ll_i2[pair_index];
     const RVec<float>* eta = nullptr;
     const RVec<float>* phi = nullptr;
-    if (ll_lepid[pair_index] == 11) { eta = &el_eta; phi = &el_phi; }
-    else if (ll_lepid[pair_index] == 13) { eta = &mu_eta; phi = &mu_phi; }
+    const RVec<float>* lepton_pt = nullptr;
+    if (ll_lepid[pair_index] == 11) { eta = &el_eta; phi = &el_phi; lepton_pt = &el_pt; }
+    else if (ll_lepid[pair_index] == 13) { eta = &mu_eta; phi = &mu_phi; lepton_pt = &mu_pt; }
     else return out;
+    const double pt1 = value(*lepton_pt, first), pt2 = value(*lepton_pt, second);
+    if (std::isfinite(pt1) && std::isfinite(pt2) && pt1 > 0. && pt2 > 0.) {
+        out.lepton1_eta = value(*eta, pt1 >= pt2 ? first : second);
+        out.lepton2_eta = value(*eta, pt1 >= pt2 ? second : first);
+    }
     const double dr1 = delta_r(out.photon_eta, gphi, value(*eta, first), value(*phi, first));
     const double dr2 = delta_r(out.photon_eta, gphi, value(*eta, second), value(*phi, second));
     if (std::isfinite(dr1) && std::isfinite(dr2)) {
@@ -194,14 +252,21 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
     """Reference-style overlays and ratio pads, without global title/cut notes."""
     if panels is None:
         panels = PANELS
+    if not panels or len(central_histograms) != len(panels) or len(private_histograms) != len(panels):
+        raise ValueError("Each panel needs exactly one central and one private histogram.")
+    if any(len(event_counts[sample]) != len(panels) for sample in ("Central", "Private")):
+        raise ValueError("Each panel needs a central and private event count.")
     root.gStyle.SetOptStat(0)
     root.gStyle.SetTextFont(42)
     root.gStyle.SetLegendFont(42)
     root.gStyle.SetCanvasColor(0)
     root.gStyle.SetPadColor(0)
     root.gStyle.SetEndErrorSize(0)
-    canvas = root.TCanvas("hj_comparison_canvas", "", 3000, 1400)
-    canvas.Divide(5, 2, 0.001, 0.001)
+    columns = min(4, len(panels))
+    rows = math.ceil(len(panels) / columns)
+    # The PDF's individual canvases are wider than tall (approximately 3:2).
+    canvas = root.TCanvas("hj_comparison_canvas", "", 900 * columns, 600 * rows)
+    canvas.Divide(columns, rows, 0.001, 0.001)
     keep = []
     colors = (root.TColor.GetColor("#D62728"), root.TColor.GetColor("#5B88CF"))
     for index, (central, private, panel) in enumerate(
@@ -245,20 +310,13 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         central.GetXaxis().SetTitleSize(0.)
         central.Draw("HIST")
         private.Draw("HIST SAME")
-        if panel[0] == "m_llgamma":
-            mass_line = root.TLine(125., central.GetMinimum(), 125., central.GetMaximum())
-            mass_line.SetLineColor(root.kBlack)
-            mass_line.SetLineStyle(2)
-            mass_line.SetLineWidth(2)
-            mass_line.Draw()
-            keep.append(mass_line)
         central.Draw("E SAME")
         private.Draw("E SAME")
         keep.append(draw_y_title(root, top, "A.U. / {:g}{}".format(width, unit),
                                  "hj_y_title_top_" + str(index)))
         # Two aligned rows at opposite top corners, without a sample heading.
         names = root.TLegend(0.24, 0.76, 0.65, 0.88)
-        counts = root.TLegend(0.68, 0.76, 0.925, 0.88)
+        counts = root.TLegend(0.65, 0.76, 0.895, 0.88)
         for legend in (names, counts):
             legend.SetBorderSize(0)
             legend.SetFillStyle(0)
@@ -303,10 +361,6 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         axis_hist.GetXaxis().SetLabelOffset(0.015)
         axis_hist.GetXaxis().SetNdivisions(510)
         axis_hist.GetYaxis().SetNdivisions(505)
-        if panel[0] == "n_jets":
-            for b in range(1, axis_hist.GetNbinsX()):
-                axis_hist.GetXaxis().SetBinLabel(b, str(b - 1))
-            axis_hist.GetXaxis().SetBinLabel(axis_hist.GetNbinsX(), "#geq9")
         axis_hist.Draw("AXIS")
         line = root.TLine(panel[4], 1., panel[5], 1.)
         line.SetLineColor(root.kBlack)
@@ -425,7 +479,9 @@ def book_histograms(root, files, sample_name):
     expression = (
         "hjpicoplot::build(llphoton_pt, llphoton_m, llphoton_iph, llphoton_ill, "
         "photon_eta, photon_phi, ll_i1, ll_i2, ll_lepid, el_eta, el_phi, mu_eta, mu_phi, "
-        "njet, jet_pt, jet_isgood, llphoton_cosTheta, llphoton_costheta)"
+        "njet, jet_pt, jet_isgood, llphoton_cosTheta, llphoton_costheta, "
+        "photon_pt, photon_idmva, photon_energyErr, llphoton_psi, el_pt, mu_pt, "
+        "jet_eta, jet_phi, jet_m, llphoton_phi, photon_mht_dphi, ht, mht)"
     )
     values = finite_weight.Define("hj_pico_values", expression)
     actions, counts = [], []
@@ -478,11 +534,17 @@ def main():
                 print("  {}: N={:,}, undefined/no-object={:,}".format(panel[0], count, entries - count))
             samples[sample] = histograms
             event_counts[sample] = summary["counts"]
-        output = Path(__file__).resolve().parents[2] / "plots" / (
-            "HJ_" + args.year + "_pico_central_vs_private.png")
-        draw_plots(ROOT, samples["Central"], samples["Private"], args.year, output,
-                   event_counts=event_counts, panels=PANELS)
-        print("Saved " + str(output))
+        start = 0
+        for page, panels in enumerate(PLOT_GROUPS, start=1):
+            stop = start + len(panels)
+            output = Path(__file__).resolve().parents[2] / "plots" / (
+                "HJ_" + args.year + "_pico_central_vs_private_" + str(page) + ".png")
+            draw_plots(ROOT, samples["Central"][start:stop], samples["Private"][start:stop],
+                       args.year, output,
+                       event_counts={sample: counts[start:stop] for sample, counts in event_counts.items()},
+                       panels=panels)
+            print("Saved " + str(output))
+            start = stop
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         parser.exit(1, "Pico plotting failed: {}\n".format(error))
 
