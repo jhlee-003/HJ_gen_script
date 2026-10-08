@@ -23,7 +23,7 @@ PANELS = (
     ("dr_max", "Farthest photon-lepton separation", "#DeltaR_{max}(#gamma,#it{l})", 50, 0., 6.),
     ("n_jets", "Jet multiplicity", "N_{jet}", 10, -0.5, 9.5),
     ("leading_jet_pt", "Leading-jet transverse momentum", "p_{T}(j_{1}) [GeV]", 50, 0., 300.),
-    ("m_llgamma", "Dilepton-photon invariant mass", "m_{#it{l}#it{l}#gamma} [GeV]", 60, 100., 180.),
+    ("m_llgamma", "Dilepton-photon invariant mass", "m_{#it{l}#it{l}#gamma} [GeV]", 60, 100., 150.),
     ("cos_Theta", "Z boson production angle", "cos#Theta", 50, -1., 1.),
     ("cos_theta", "Lepton production polar angle", "cos#theta", 50, -1., 1.),
     ("pt_llgamma", "Dilepton-photon transverse momentum", "p_{T}(#it{l}#it{l}#gamma) [GeV]", 50, 0., 200.),
@@ -190,7 +190,7 @@ def draw_y_title(root, pad, text, name):
     return title
 
 
-def draw_plots(root, central_histograms, private_histograms, label, output, panels=None):
+def draw_plots(root, central_histograms, private_histograms, label, output, job_counts, panels=None):
     """Reference-style overlays and ratio pads, without global title/cut notes."""
     if panels is None:
         panels = PANELS
@@ -249,26 +249,22 @@ def draw_plots(root, central_histograms, private_histograms, label, output, pane
         private.Draw("E SAME")
         keep.append(draw_y_title(root, top, "A.U. / {:g}{}".format(width, unit),
                                  "hj_y_title_top_" + str(index)))
-        legend_left = 0.32
-        header = root.TLegend(legend_left, 0.825, 0.95, 0.89)
-        # Dedicated non-overlapping columns leave room for the longer labels
-        # and multi-million-event counts; text no longer crosses column borders.
-        names = root.TLegend(legend_left, 0.695, 0.71, 0.825)
-        counts = root.TLegend(0.74, 0.695, 0.95, 0.825)
-        for legend in (header, names, counts):
+        # Two aligned rows at opposite top corners, without a sample heading.
+        names = root.TLegend(0.22, 0.79, 0.65, 0.91)
+        counts = root.TLegend(0.72, 0.79, 0.945, 0.91)
+        for legend in (names, counts):
             legend.SetBorderSize(0)
             legend.SetFillStyle(0)
             legend.SetTextFont(42)
             legend.SetTextSize(0.040)
             legend.SetMargin(0.)
-        header.SetTextSize(0.048)
-        header.AddEntry(root.nullptr, "{} ggF signal sample".format(label), "")
         names.SetMargin(0.11)
         names.AddEntry(central, " ggH_qme (central)", "l")
         names.AddEntry(private, " HJ (private)", "l")
-        counts.AddEntry(root.nullptr, "N={:,}".format(int(central.GetEntries())), "")
-        counts.AddEntry(root.nullptr, "N={:,}".format(int(private.GetEntries())), "")
-        for legend in (header, names, counts):
+        counts.SetTextAlign(32)
+        counts.AddEntry(root.nullptr, "Jobs={:,}".format(job_counts["Central"]), "")
+        counts.AddEntry(root.nullptr, "Jobs={:,}".format(job_counts["Private"]), "")
+        for legend in (names, counts):
             legend.Draw()
         cms = root.TLatex()
         cms.SetNDC(True)
@@ -281,7 +277,7 @@ def draw_plots(root, central_histograms, private_histograms, label, output, pane
         energy.SetTextAlign(31)
         energy.SetTextSize(0.052)
         energy.DrawLatex(0.95, 0.935, "13.6 TeV")
-        keep.extend((header, names, counts, cms, energy))
+        keep.extend((names, counts, cms, energy))
         top.RedrawAxis()
         bottom.cd()
         ratio = make_ratio(root, private, central)
@@ -460,10 +456,12 @@ def main():
     ROOT.gROOT.SetBatch(True)
     ROOT.EnableImplicitMT(2)
     try:
-        samples = {}
+        samples, job_counts = {}, {}
         for sample, key in (("Central", "central"), ("Private", "private")):
             directory = SAMPLE_DIRECTORIES[args.year][key]
             files, _ = list_pico_files(directory)
+            # The baseline workflow writes one pico output per job.
+            job_counts[sample] = len(files)
             print("{}: ALL {} pico ROOT files in {}".format(sample, len(files), directory), flush=True)
             entries = validate_files(ROOT, files)
             histograms, summary = book_histograms(ROOT, files, sample.lower())
@@ -476,7 +474,8 @@ def main():
             samples[sample] = histograms
         output = Path(__file__).resolve().parents[2] / "plots" / (
             "HJ_" + args.year + "_pico_central_vs_private.png")
-        draw_plots(ROOT, samples["Central"], samples["Private"], args.year, output, panels=PANELS)
+        draw_plots(ROOT, samples["Central"], samples["Private"], args.year, output,
+                   job_counts=job_counts, panels=PANELS)
         print("Saved " + str(output))
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         parser.exit(1, "Pico plotting failed: {}\n".format(error))

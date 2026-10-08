@@ -88,7 +88,7 @@ def main():
     assert keys == ["pt_over_mass", "photon_eta", "dr_min", "dr_max", "n_jets",
                     "leading_jet_pt", "m_llgamma", "cos_Theta", "cos_theta", "pt_llgamma"]
     ranges = {panel[0]: panel[4:] for panel in plotter.PANELS}
-    assert ranges["m_llgamma"] == (100., 180.)
+    assert ranges["m_llgamma"] == (100., 150.)
     assert ranges["pt_llgamma"] == (0., 200.)
     assert [panel[3] for panel in plotter.PANELS] == [50, 50, 50, 50, 10, 50, 60, 50, 50, 50]
 
@@ -188,6 +188,7 @@ def main():
         assert all(not item.kwargs for item in discovery.call_args_list)
         assert draw.call_args.args[4].name == "HJ_2022_pico_central_vs_private.png"
         assert draw.call_args.args[4].parent == Path(__file__).resolve().parents[3] / "plots"
+        assert draw.call_args.kwargs["job_counts"] == {"Central": 3, "Private": 3}
 
         central = [h.Clone("central_" + key) for key, h in zip(keys, histograms)]
         private = [h.Clone("private_" + key) for key, h in zip(keys, histograms)]
@@ -206,14 +207,20 @@ def main():
                           for pad, kind in ((top, "top"), (bottom, "ratio"))]
                 assert titles[0].GetX() == titles[1].GetX() == 0.065
                 legends = [p for p in top.GetListOfPrimitives() if p.InheritsFrom("TLegend")]
-                assert legends[0].GetX1NDC() == legends[1].GetX1NDC()
+                assert len(legends) == 2
+                assert legends[0].GetX1NDC() == 0.22
+                assert legends[1].GetX2NDC() == 0.945
+                assert legends[0].GetY2NDC() == legends[1].GetY2NDC() == 0.91
+                assert legends[0].GetX2NDC() < legends[1].GetX1NDC()
+                assert legends[1].GetTextAlign() == 32
                 labels = [entry.GetLabel() for legend in legends for entry in legend.GetListOfPrimitives()]
-                assert "2022 ggF signal sample" in labels
+                assert "2022 ggF signal sample" not in labels
                 assert " ggH_qme (central)" in labels and " HJ (private)" in labels
-                assert any(label.startswith("N=") for label in labels)
+                assert "Jobs=19" in labels and "Jobs=100" in labels
             original_close(canvas)
         with patch.object(ROOT.TCanvas, "Close", inspect_canvas):
-            plotter.draw_plots(ROOT, central, private, "2022", output, panels=plotter.PANELS)
+            plotter.draw_plots(ROOT, central, private, "2022", output,
+                               job_counts={"Central": 19, "Private": 100}, panels=plotter.PANELS)
         assert output.is_file() and output.stat().st_size > 0
         ratio = make_ratio(ROOT, private[0], central[0])
         assert all(math.isclose(ratio.GetPointY(i), 1.) for i in range(ratio.GetN()))

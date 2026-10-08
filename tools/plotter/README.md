@@ -18,12 +18,13 @@ Add future year paths to `SAMPLE_DIRECTORIES` in the pico plotter.
 
 Output: `plots/HJ_2022_pico_central_vs_private.png`. The standalone
 five-column/two-row PNG keeps the same ten variables and appearance. Pico-specific
-display ranges are **100-180 GeV for m(llgamma)** and **0-200 GeV for
+display ranges are **100-150 GeV for m(llgamma)** and **0-200 GeV for
 pT(llgamma)**; bin counts and the other eight ranges are unchanged.
 These are display ranges, not additional event cuts; overflow folding and
 unit-integral normalization are retained. It keeps the red/blue labels,
-top-aligned y titles, aligned legends, `N=` counts, weighted error bars,
-overflow folding, and 0-2 Private/Central ratios. There is no global title
+top-aligned y titles, process legends in the upper-left corner, right-aligned
+`Jobs=` counts in the upper-right corner, weighted error bars, overflow folding,
+and 0-2 Private/Central ratios. The sample-heading legend is removed. There is no global title
 or bottom explanation. No draw_pico installation/build or other plotting script is required.
 
 The input is a pico **`tree`**, not a NanoAOD `Events` tree. No object ID,
@@ -79,8 +80,11 @@ Use the signed, stored pico **`weight`** branch, which already includes
 luminosity/generator normalization and the correction factors produced
 by nano2pico. Do not multiply by `genWeight`, `w_lumi`, or those correction
 factors again. Each histogram is independently normalized to unit summed
-weight, not divided by its unweighted event count. The legend's `N=` is
-the unweighted number of defined observations, not an expected yield.
+weight, not divided by its unweighted event count. The upper-right `Jobs=`
+counts the input pico files for each sample (one output per baseline job),
+including empty picos. It is not an event count, a scheduler-history query,
+or an expected yield. Defined-observation counts are still printed per panel
+in the terminal.
 Negative weights and sum-of-squared-weight errors are retained.
 
 This follows the weighted overlay/shape, overflow, and ratio concepts in
