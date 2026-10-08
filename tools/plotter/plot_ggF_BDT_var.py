@@ -233,10 +233,10 @@ def make_ratio(root, private_hist, central_hist):
     return graph
 
 
-def draw_y_title(root, pad, text, name):
+def draw_y_title(root, pad, text, name, x=0.065):
     """Top-align both vertical titles at one x anchor and pixel font size."""
     pad.cd()
-    title = root.TLatex(0.065, 1. - pad.GetTopMargin(), text)
+    title = root.TLatex(x, 1. - pad.GetTopMargin(), text)
     title.SetName(name)
     title.SetNDC(True)
     title.SetTextFont(43)
@@ -250,7 +250,7 @@ def draw_y_title(root, pad, text, name):
 
 def draw_plots(root, central_histograms, private_histograms, label, output, event_counts,
                panels=None, columns=None, panel_size=(900, 600), reference_lines=None,
-               legend_text_size=0.060):
+               legend_text_size=0.060, y_title_x=0.065):
     """Reference-style overlays and ratio pads, without global title/cut notes."""
     if panels is None:
         panels = PANELS
@@ -327,7 +327,7 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         central.Draw("E SAME")
         private.Draw("E SAME")
         keep.append(draw_y_title(root, top, "A.U. / {:g}{}".format(width, unit),
-                                 "hj_y_title_top_" + str(index)))
+                                 "hj_y_title_top_" + str(index), x=y_title_x))
         # Two aligned rows at opposite top corners, without a sample heading.
         names = root.TLegend(0.24, 0.72, 0.65, 0.88)
         counts = root.TLegend(0.65, 0.72, 0.895, 0.88)
@@ -383,7 +383,7 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         line.Draw()
         ratio.Draw("P SAME")
         keep.append(draw_y_title(root, bottom, "Private / Central",
-                                 "hj_y_title_ratio_" + str(index)))
+                                 "hj_y_title_ratio_" + str(index), x=y_title_x))
         keep.extend((axis_hist, line, ratio))
         bottom.RedrawAxis()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -556,7 +556,7 @@ def main():
             draw_plots(ROOT, samples["Central"][start:stop], samples["Private"][start:stop],
                        args.year, output,
                        event_counts={sample: counts[start:stop] for sample, counts in event_counts.items()},
-                       panels=panels)
+                       panels=panels, y_title_x=0.11)
             print("Saved " + str(output))
             start = stop
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:

@@ -223,6 +223,7 @@ def main():
             assert call.args[4].parent == Path(__file__).resolve().parents[3] / "plots"
             start, stop = ((0, 8), (8, 16), (16, 19))[page - 1]
             assert call.kwargs["panels"] == plotter.PANELS[start:stop]
+            assert call.kwargs["y_title_x"] == 0.11
             assert call.kwargs["event_counts"] == {
                 "Central": summary["counts"][start:stop], "Private": summary["counts"][start:stop]}
 
@@ -244,7 +245,10 @@ def main():
                 assert axes.GetXaxis().GetXmax() == group[index - 1][5]
                 titles = [pad.GetPrimitive("hj_y_title_" + kind + "_" + str(index))
                           for pad, kind in ((top, "top"), (bottom, "ratio"))]
-                assert titles[0].GetX() == titles[1].GetX() == 0.065
+                assert titles[0].GetX() == titles[1].GetX() == 0.11
+                for title, pad in zip(titles, (top, bottom)):
+                    assert title.GetY() == 1. - pad.GetTopMargin()
+                    assert title.GetTextAlign() == 32
                 legends = [p for p in top.GetListOfPrimitives() if p.InheritsFrom("TLegend")]
                 assert len(legends) == 2
                 assert legends[0].GetX1NDC() == 0.24
@@ -271,7 +275,8 @@ def main():
             with patch.object(ROOT.TCanvas, "Close", inspect_canvas):
                 plotter.draw_plots(ROOT, central[start:stop], private[start:stop], "2022", output,
                                    event_counts={"Central": summary["counts"][start:stop],
-                                                 "Private": summary["counts"][start:stop]}, panels=group)
+                                                 "Private": summary["counts"][start:stop]},
+                                   panels=group, y_title_x=0.11)
             assert output.is_file() and output.stat().st_size > 0
             start = stop
         ratio = make_ratio(ROOT, private[0], central[0])

@@ -73,7 +73,7 @@ def main():
     keys = [panel[0] for panel in plotter.PANELS]
     assert keys == ["pt_gamma", "pt_ll", "pt_llgamma", "m_ll", "m_llgamma", "npv"]
     assert [panel[3:] for panel in plotter.PANELS] == [
-        (50, 0., 240.), (50, 0., 240.), (50, 0., 240.),
+        (50, 0., 100.), (50, 0., 200.), (50, 0., 200.),
         (35, 80., 100.), (50, 100., 150.), (70, 0., 70.)]
     negative = event()
     negative.update(weight=-0.5, photon_pt=[10., 70.], ll_pt=[900., 60.],
@@ -154,6 +154,10 @@ def main():
                 bottom = cell.GetPrimitive("hj_ratio_" + str(index))
                 axes = bottom.GetPrimitive("hj_ratio_axes_" + str(index))
                 assert axes.GetMinimum() == 0. and axes.GetMaximum() == 2.
+                for pad, kind in ((top, "top"), (bottom, "ratio")):
+                    title = pad.GetPrimitive("hj_y_title_" + kind + "_" + str(index))
+                    assert title.GetX() == 0.065
+                    assert title.GetY() == 1. - pad.GetTopMargin()
                 legends = [p for p in top.GetListOfPrimitives() if p.InheritsFrom("TLegend")]
                 assert len(legends) == 2
                 assert all(math.isclose(legend.GetTextSize(), 0.04, rel_tol=1.e-6) for legend in legends)

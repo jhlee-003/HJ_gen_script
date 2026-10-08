@@ -13,9 +13,9 @@ from plot_ggF_BDT_var import SAMPLE_DIRECTORIES, configured_year, list_pico_file
 
 # column, panel title, x-axis label, bin count, lower edge, upper edge
 PANELS = (
-    ("pt_gamma", "Photon transverse momentum", "p_{T}(#gamma) [GeV]", 50, 0., 240.),
-    ("pt_ll", "Dilepton transverse momentum", "p_{T}(#it{l}#it{l}) [GeV]", 50, 0., 240.),
-    ("pt_llgamma", "Dilepton-photon transverse momentum", "p_{T}(#it{l}#it{l}#gamma) [GeV]", 50, 0., 240.),
+    ("pt_gamma", "Photon transverse momentum", "p_{T}(#gamma) [GeV]", 50, 0., 100.),
+    ("pt_ll", "Dilepton transverse momentum", "p_{T}(#it{l}#it{l}) [GeV]", 50, 0., 200.),
+    ("pt_llgamma", "Dilepton-photon transverse momentum", "p_{T}(#it{l}#it{l}#gamma) [GeV]", 50, 0., 200.),
     ("m_ll", "Dilepton invariant mass", "m_{#it{l}#it{l}} [GeV]", 35, 80., 100.),
     ("m_llgamma", "Dilepton-photon invariant mass", "m_{#it{l}#it{l}#gamma} [GeV]", 50, 100., 150.),
     ("npv", "Primary-vertex multiplicity", "N_{PV}", 70, 0., 70.),

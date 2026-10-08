@@ -15,9 +15,9 @@ are applied. The input directories are the same as for the BDT plots below.
 
 | Variable | Pico source | Display range | Bins |
 | --- | --- | --- | --- |
-| pT(gamma) | `photon_pt[llphoton_iph[0]]` | 0-240 GeV | 50 |
-| pT(ll) | `ll_pt[llphoton_ill[0]]` | 0-240 GeV | 50 |
-| pT(llgamma) | `llphoton_pt[0]` | 0-240 GeV | 50 |
+| pT(gamma) | `photon_pt[llphoton_iph[0]]` | 0-100 GeV | 50 |
+| pT(ll) | `ll_pt[llphoton_ill[0]]` | 0-200 GeV | 50 |
+| pT(llgamma) | `llphoton_pt[0]` | 0-200 GeV | 50 |
 | m(ll) | `ll_m[llphoton_ill[0]]` | 80-100 GeV | 35 |
 | m(llgamma) | `llphoton_m[0]` | 100-150 GeV | 50 |
 | NPV | `npv` (total vertices, not `npv_good`) | 0-70, unit-width bins, overflow folded into the last bin | 70 |
@@ -59,7 +59,10 @@ retained: CMS Private Work / 13.6 TeV, red `[Central] ggH_qme`, blue `[Priavate]
 (labels shared by both plotters, spelling as requested),
 top-aligned y titles, weighted errors, unit-integral shapes, folded edge bins,
 and 0-2 Private/Central ratios. There is no legend heading, global explanation,
-or bottom note. The event-count legend is shifted slightly left. The old
+or bottom note. The event-count legend is shifted slightly left.
+BDT overlay and ratio y titles share the closer-to-frame x anchor 0.11 and
+retain their top alignment. Kinematics y-title placement remains unchanged.
+The old
 m(llgamma), pT(llgamma), and jet-count panels are not part of the PDF's 19-panel
 set, so there is no mass panel or 125 GeV marker in these images.
 Older PNGs are not deleted automatically.
