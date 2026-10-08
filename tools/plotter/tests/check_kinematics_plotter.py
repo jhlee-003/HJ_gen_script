@@ -73,8 +73,8 @@ def main():
     keys = [panel[0] for panel in plotter.PANELS]
     assert keys == ["pt_gamma", "pt_ll", "pt_llgamma", "m_ll", "m_llgamma", "npv"]
     assert [panel[3:] for panel in plotter.PANELS] == [
-        (50, 0., 200.), (50, 0., 200.), (50, 0., 200.),
-        (35, 50., 120.), (50, 100., 150.), (100, -0.5, 99.5)]
+        (50, 0., 240.), (50, 0., 240.), (50, 0., 240.),
+        (35, 80., 100.), (50, 100., 150.), (70, 0., 70.)]
     negative = event()
     negative.update(weight=-0.5, photon_pt=[10., 70.], ll_pt=[900., 60.],
                     llphoton_pt=[150.], ll_m=[200., 100.], llphoton_m=[135.], npv=80)
@@ -138,6 +138,7 @@ def main():
         assert draw.call_args.args[4].parent == Path(__file__).resolve().parents[3] / "plots"
         assert draw.call_args.kwargs["columns"] == 3
         assert draw.call_args.kwargs["panel_size"] == (600, 700)
+        assert draw.call_args.kwargs["legend_text_size"] == 0.040
         assert draw.call_args.kwargs["event_counts"] == {"Central": summary["counts"], "Private": summary["counts"]}
 
         central = [h.Clone("central_" + key) for key, h in zip(keys, histograms)]
@@ -155,7 +156,11 @@ def main():
                 assert axes.GetMinimum() == 0. and axes.GetMaximum() == 2.
                 legends = [p for p in top.GetListOfPrimitives() if p.InheritsFrom("TLegend")]
                 assert len(legends) == 2
-                assert all(math.isclose(legend.GetTextSize(), 0.06, rel_tol=1.e-6) for legend in legends)
+                assert all(math.isclose(legend.GetTextSize(), 0.04, rel_tol=1.e-6) for legend in legends)
+                labels = [entry.GetLabel() for entry in legends[0].GetListOfPrimitives()]
+                assert labels == [" [Central] ggH_qme", " [Priavate] HJ (MiNNLO)"]
+                assert axes.GetXaxis().GetXmin() == plotter.PANELS[index - 1][4]
+                assert axes.GetXaxis().GetXmax() == plotter.PANELS[index - 1][5]
                 lines = [p for p in top.GetListOfPrimitives() if p.InheritsFrom("TLine")]
                 assert len(lines) == (1 if index == 5 else 0)
                 if lines:
@@ -166,7 +171,7 @@ def main():
             plotter.draw_plots(ROOT, central, private, "2022", output,
                                event_counts={"Central": summary["counts"], "Private": summary["counts"]},
                                panels=plotter.PANELS, columns=3, panel_size=(600, 700),
-                               reference_lines={"m_llgamma": 125.})
+                               reference_lines={"m_llgamma": 125.}, legend_text_size=0.040)
         assert output.is_file() and output.stat().st_size > 0
         ratio = make_ratio(ROOT, private[0], central[0])
         assert all(math.isclose(ratio.GetPointY(i), 1.) for i in range(ratio.GetN()))

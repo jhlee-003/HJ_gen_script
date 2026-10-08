@@ -13,12 +13,12 @@ from plot_ggF_BDT_var import SAMPLE_DIRECTORIES, configured_year, list_pico_file
 
 # column, panel title, x-axis label, bin count, lower edge, upper edge
 PANELS = (
-    ("pt_gamma", "Photon transverse momentum", "p_{T}(#gamma) [GeV]", 50, 0., 200.),
-    ("pt_ll", "Dilepton transverse momentum", "p_{T}(#it{l}#it{l}) [GeV]", 50, 0., 200.),
-    ("pt_llgamma", "Dilepton-photon transverse momentum", "p_{T}(#it{l}#it{l}#gamma) [GeV]", 50, 0., 200.),
-    ("m_ll", "Dilepton invariant mass", "m_{#it{l}#it{l}} [GeV]", 35, 50., 120.),
+    ("pt_gamma", "Photon transverse momentum", "p_{T}(#gamma) [GeV]", 50, 0., 240.),
+    ("pt_ll", "Dilepton transverse momentum", "p_{T}(#it{l}#it{l}) [GeV]", 50, 0., 240.),
+    ("pt_llgamma", "Dilepton-photon transverse momentum", "p_{T}(#it{l}#it{l}#gamma) [GeV]", 50, 0., 240.),
+    ("m_ll", "Dilepton invariant mass", "m_{#it{l}#it{l}} [GeV]", 35, 80., 100.),
     ("m_llgamma", "Dilepton-photon invariant mass", "m_{#it{l}#it{l}#gamma} [GeV]", 50, 100., 150.),
-    ("npv", "Primary-vertex multiplicity", "N_{PV}", 100, -0.5, 99.5),
+    ("npv", "Primary-vertex multiplicity", "N_{PV}", 70, 0., 70.),
 )
 REQUIRED_BRANCHES = (
     "weight", "photon_pt", "ll_pt", "ll_m", "llphoton_pt", "llphoton_m",
@@ -162,7 +162,7 @@ def main():
         output = Path(__file__).resolve().parents[2] / "plots" / ("ggF_kinematics_" + args.year + ".png")
         draw_plots(ROOT, samples["Central"], samples["Private"], args.year, output,
                    event_counts=event_counts, panels=PANELS, columns=3, panel_size=(600, 700),
-                   reference_lines={"m_llgamma": 125.})
+                   reference_lines={"m_llgamma": 125.}, legend_text_size=0.040)
         print("Saved " + str(output))
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         parser.exit(1, "Kinematic plotting failed: {}\n".format(error))

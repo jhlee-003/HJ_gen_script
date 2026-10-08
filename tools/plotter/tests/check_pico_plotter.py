@@ -257,7 +257,7 @@ def main():
                 assert legends[1].GetTextAlign() == 32
                 labels = [entry.GetLabel() for legend in legends for entry in legend.GetListOfPrimitives()]
                 assert "2022 ggF signal sample" not in labels
-                assert " ggH_qme (central)" in labels and " HJ (private)" in labels
+                assert " [Central] ggH_qme" in labels and " [Priavate] HJ (MiNNLO)" in labels
                 assert labels[-2:] == ["N={:,}".format(summary["counts"][start + index - 1])] * 2
                 assert not any(label.startswith("Jobs=") for label in labels)
                 vertical_lines = [p for p in top.GetListOfPrimitives()

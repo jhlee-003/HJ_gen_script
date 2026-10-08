@@ -8,18 +8,19 @@ This separate script creates one `plots/ggF_kinematics_2022.png` with a 3 x 2
 layout and the original taller 600 x 700 pixel panel proportions. It imports
 the shared renderer and year/input routing from `plot_ggF_BDT_var.py`, so keep
 both scripts in this directory. It retains signed stored `weight`, unit-area
-normalization, folded edge bins, 0-2 Private/Central ratios, enlarged legends,
+normalization, folded edge bins, 0-2 Private/Central ratios, original-size legends
+(0.040; the BDT plotter retains its enlarged 0.060 legends),
 per-panel `N=` counts, and the black dashed 125 GeV mass reference. No new cuts
 are applied. The input directories are the same as for the BDT plots below.
 
 | Variable | Pico source | Display range | Bins |
 | --- | --- | --- | --- |
-| pT(gamma) | `photon_pt[llphoton_iph[0]]` | 0-200 GeV | 50 |
-| pT(ll) | `ll_pt[llphoton_ill[0]]` | 0-200 GeV | 50 |
-| pT(llgamma) | `llphoton_pt[0]` | 0-200 GeV | 50 |
-| m(ll) | `ll_m[llphoton_ill[0]]` | 50-120 GeV | 35 |
+| pT(gamma) | `photon_pt[llphoton_iph[0]]` | 0-240 GeV | 50 |
+| pT(ll) | `ll_pt[llphoton_ill[0]]` | 0-240 GeV | 50 |
+| pT(llgamma) | `llphoton_pt[0]` | 0-240 GeV | 50 |
+| m(ll) | `ll_m[llphoton_ill[0]]` | 80-100 GeV | 35 |
 | m(llgamma) | `llphoton_m[0]` | 100-150 GeV | 50 |
-| NPV | `npv` (total vertices, not `npv_good`) | integer bins 0-99, overflow folded into 99 | 100 |
+| NPV | `npv` (total vertices, not `npv_good`) | 0-70, unit-width bins, overflow folded into the last bin | 70 |
 
 All candidate indices are bounds-checked. Zero pT/zero vertices are valid;
 invalid or undefined values are omitted only from their own panel. All six
@@ -54,7 +55,8 @@ read left-to-right and then top-to-bottom:
 3. `plots/ggF_BDT_var_2022_3.png`: three panels, DeltaPhi(Zgamma,j1), system balance, and photon Zeppenfeld, arranged 3 x 1.
 
 Each panel has an approximately 3:2 width/height ratio. Existing styling is
-retained: CMS Private Work / 13.6 TeV, red ggH_qme (central), blue HJ (private),
+retained: CMS Private Work / 13.6 TeV, red `[Central] ggH_qme`, blue `[Priavate] HJ (MiNNLO)`
+(labels shared by both plotters, spelling as requested),
 top-aligned y titles, weighted errors, unit-integral shapes, folded edge bins,
 and 0-2 Private/Central ratios. There is no legend heading, global explanation,
 or bottom note. The event-count legend is shifted slightly left. The old

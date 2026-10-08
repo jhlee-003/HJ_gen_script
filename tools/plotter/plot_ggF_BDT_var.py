@@ -249,7 +249,8 @@ def draw_y_title(root, pad, text, name):
 
 
 def draw_plots(root, central_histograms, private_histograms, label, output, event_counts,
-               panels=None, columns=None, panel_size=(900, 600), reference_lines=None):
+               panels=None, columns=None, panel_size=(900, 600), reference_lines=None,
+               legend_text_size=0.060):
     """Reference-style overlays and ratio pads, without global title/cut notes."""
     if panels is None:
         panels = PANELS
@@ -334,11 +335,11 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
             legend.SetBorderSize(0)
             legend.SetFillStyle(0)
             legend.SetTextFont(42)
-            legend.SetTextSize(0.060)
+            legend.SetTextSize(legend_text_size)
             legend.SetMargin(0.)
         names.SetMargin(0.11)
-        names.AddEntry(central, " ggH_qme (central)", "l")
-        names.AddEntry(private, " HJ (private)", "l")
+        names.AddEntry(central, " [Central] ggH_qme", "l")
+        names.AddEntry(private, " [Priavate] HJ (MiNNLO)", "l")
         counts.SetTextAlign(32)
         counts.AddEntry(root.nullptr, "N={:,}".format(event_counts["Central"][index - 1]), "")
         counts.AddEntry(root.nullptr, "N={:,}".format(event_counts["Private"][index - 1]), "")
