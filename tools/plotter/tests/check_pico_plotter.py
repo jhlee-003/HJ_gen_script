@@ -188,7 +188,8 @@ def main():
         assert all(not item.kwargs for item in discovery.call_args_list)
         assert draw.call_args.args[4].name == "HJ_2022_pico_central_vs_private.png"
         assert draw.call_args.args[4].parent == Path(__file__).resolve().parents[3] / "plots"
-        assert draw.call_args.kwargs["job_counts"] == {"Central": 3, "Private": 3}
+        assert draw.call_args.kwargs["event_counts"] == {
+            "Central": summary["counts"], "Private": summary["counts"]}
 
         central = [h.Clone("central_" + key) for key, h in zip(keys, histograms)]
         private = [h.Clone("private_" + key) for key, h in zip(keys, histograms)]
@@ -208,19 +209,30 @@ def main():
                 assert titles[0].GetX() == titles[1].GetX() == 0.065
                 legends = [p for p in top.GetListOfPrimitives() if p.InheritsFrom("TLegend")]
                 assert len(legends) == 2
-                assert legends[0].GetX1NDC() == 0.22
-                assert legends[1].GetX2NDC() == 0.945
-                assert legends[0].GetY2NDC() == legends[1].GetY2NDC() == 0.91
+                assert legends[0].GetX1NDC() == 0.24
+                assert legends[1].GetX2NDC() == 0.925
+                assert legends[0].GetY2NDC() == legends[1].GetY2NDC() == 0.88
                 assert legends[0].GetX2NDC() < legends[1].GetX1NDC()
                 assert legends[1].GetTextAlign() == 32
                 labels = [entry.GetLabel() for legend in legends for entry in legend.GetListOfPrimitives()]
                 assert "2022 ggF signal sample" not in labels
                 assert " ggH_qme (central)" in labels and " HJ (private)" in labels
-                assert "Jobs=19" in labels and "Jobs=100" in labels
+                assert labels[-2:] == ["N={:,}".format(summary["counts"][index - 1])] * 2
+                assert not any(label.startswith("Jobs=") for label in labels)
+                vertical_lines = [p for p in top.GetListOfPrimitives()
+                                  if p.InheritsFrom("TLine") and p.GetX1() == p.GetX2()]
+                assert len(vertical_lines) == (1 if index == 7 else 0)
+                if vertical_lines:
+                    line = vertical_lines[0]
+                    assert line.GetX1() == 125.
+                    assert line.GetLineColor() == ROOT.kBlack and line.GetLineStyle() == 2
+                    assert line.GetY1() == central[index - 1].GetMinimum()
+                    assert line.GetY2() == central[index - 1].GetMaximum()
             original_close(canvas)
         with patch.object(ROOT.TCanvas, "Close", inspect_canvas):
             plotter.draw_plots(ROOT, central, private, "2022", output,
-                               job_counts={"Central": 19, "Private": 100}, panels=plotter.PANELS)
+                               event_counts={"Central": summary["counts"], "Private": summary["counts"]},
+                               panels=plotter.PANELS)
         assert output.is_file() and output.stat().st_size > 0
         ratio = make_ratio(ROOT, private[0], central[0])
         assert all(math.isclose(ratio.GetPointY(i), 1.) for i in range(ratio.GetN()))

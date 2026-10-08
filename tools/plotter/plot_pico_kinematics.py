@@ -190,7 +190,7 @@ def draw_y_title(root, pad, text, name):
     return title
 
 
-def draw_plots(root, central_histograms, private_histograms, label, output, job_counts, panels=None):
+def draw_plots(root, central_histograms, private_histograms, label, output, event_counts, panels=None):
     """Reference-style overlays and ratio pads, without global title/cut notes."""
     if panels is None:
         panels = PANELS
@@ -245,13 +245,20 @@ def draw_plots(root, central_histograms, private_histograms, label, output, job_
         central.GetXaxis().SetTitleSize(0.)
         central.Draw("HIST")
         private.Draw("HIST SAME")
+        if panel[0] == "m_llgamma":
+            mass_line = root.TLine(125., central.GetMinimum(), 125., central.GetMaximum())
+            mass_line.SetLineColor(root.kBlack)
+            mass_line.SetLineStyle(2)
+            mass_line.SetLineWidth(2)
+            mass_line.Draw()
+            keep.append(mass_line)
         central.Draw("E SAME")
         private.Draw("E SAME")
         keep.append(draw_y_title(root, top, "A.U. / {:g}{}".format(width, unit),
                                  "hj_y_title_top_" + str(index)))
         # Two aligned rows at opposite top corners, without a sample heading.
-        names = root.TLegend(0.22, 0.79, 0.65, 0.91)
-        counts = root.TLegend(0.72, 0.79, 0.945, 0.91)
+        names = root.TLegend(0.24, 0.76, 0.65, 0.88)
+        counts = root.TLegend(0.68, 0.76, 0.925, 0.88)
         for legend in (names, counts):
             legend.SetBorderSize(0)
             legend.SetFillStyle(0)
@@ -262,8 +269,8 @@ def draw_plots(root, central_histograms, private_histograms, label, output, job_
         names.AddEntry(central, " ggH_qme (central)", "l")
         names.AddEntry(private, " HJ (private)", "l")
         counts.SetTextAlign(32)
-        counts.AddEntry(root.nullptr, "Jobs={:,}".format(job_counts["Central"]), "")
-        counts.AddEntry(root.nullptr, "Jobs={:,}".format(job_counts["Private"]), "")
+        counts.AddEntry(root.nullptr, "N={:,}".format(event_counts["Central"][index - 1]), "")
+        counts.AddEntry(root.nullptr, "N={:,}".format(event_counts["Private"][index - 1]), "")
         for legend in (names, counts):
             legend.Draw()
         cms = root.TLatex()
@@ -456,12 +463,10 @@ def main():
     ROOT.gROOT.SetBatch(True)
     ROOT.EnableImplicitMT(2)
     try:
-        samples, job_counts = {}, {}
+        samples, event_counts = {}, {}
         for sample, key in (("Central", "central"), ("Private", "private")):
             directory = SAMPLE_DIRECTORIES[args.year][key]
             files, _ = list_pico_files(directory)
-            # The baseline workflow writes one pico output per job.
-            job_counts[sample] = len(files)
             print("{}: ALL {} pico ROOT files in {}".format(sample, len(files), directory), flush=True)
             entries = validate_files(ROOT, files)
             histograms, summary = book_histograms(ROOT, files, sample.lower())
@@ -472,10 +477,11 @@ def main():
             for panel, count in zip(PANELS, summary["counts"]):
                 print("  {}: N={:,}, undefined/no-object={:,}".format(panel[0], count, entries - count))
             samples[sample] = histograms
+            event_counts[sample] = summary["counts"]
         output = Path(__file__).resolve().parents[2] / "plots" / (
             "HJ_" + args.year + "_pico_central_vs_private.png")
         draw_plots(ROOT, samples["Central"], samples["Private"], args.year, output,
-                   job_counts=job_counts, panels=PANELS)
+                   event_counts=event_counts, panels=PANELS)
         print("Saved " + str(output))
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         parser.exit(1, "Pico plotting failed: {}\n".format(error))

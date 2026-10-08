@@ -23,8 +23,10 @@ pT(llgamma)**; bin counts and the other eight ranges are unchanged.
 These are display ranges, not additional event cuts; overflow folding and
 unit-integral normalization are retained. It keeps the red/blue labels,
 top-aligned y titles, process legends in the upper-left corner, right-aligned
-`Jobs=` counts in the upper-right corner, weighted error bars, overflow folding,
-and 0-2 Private/Central ratios. The sample-heading legend is removed. There is no global title
+`N=` event counts in the upper-right corner, weighted error bars, overflow folding,
+and 0-2 Private/Central ratios. Both legends are inset from the frame, and the
+m(llgamma) overlay has a black dashed vertical reference line at 125 GeV.
+The sample-heading legend is removed. There is no global title
 or bottom explanation. No draw_pico installation/build or other plotting script is required.
 
 The input is a pico **`tree`**, not a NanoAOD `Events` tree. No object ID,
@@ -80,11 +82,12 @@ Use the signed, stored pico **`weight`** branch, which already includes
 luminosity/generator normalization and the correction factors produced
 by nano2pico. Do not multiply by `genWeight`, `w_lumi`, or those correction
 factors again. Each histogram is independently normalized to unit summed
-weight, not divided by its unweighted event count. The upper-right `Jobs=`
-counts the input pico files for each sample (one output per baseline job),
-including empty picos. It is not an event count, a scheduler-history query,
-or an expected yield. Defined-observation counts are still printed per panel
-in the terminal.
+weight, not divided by its unweighted event count. The upper-right `N=`
+counts the unweighted events contributing a defined observable to that panel,
+including events folded into the edge bins. For example, the leading-jet
+panel excludes events without a good jet, while other panels can retain them.
+It is not a file/job count or an expected yield. These counts are also printed
+per panel in the terminal.
 Negative weights and sum-of-squared-weight errors are retained.
 
 This follows the weighted overlay/shape, overflow, and ratio concepts in
