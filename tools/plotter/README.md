@@ -10,12 +10,13 @@ the shared renderer and year/input routing from `plot_ggF_BDT_var.py`, so keep
 both scripts in this directory. It retains signed stored `weight`, unit-area
 normalization, folded edge bins, 0-2 Private/Central ratios, original-size legends
 (0.040; the BDT plotter retains its enlarged 0.060 legends),
-per-panel `N=` counts, and the black dashed 125 GeV mass reference. No new cuts
+per-panel `N=` counts, and black dashed mass references at 91.2 GeV for m(ll)
+and 125 GeV for m(llgamma). No new cuts
 are applied. The input directories are the same as for the BDT plots below.
 
 | Variable | Pico source | Display range | Bins |
 | --- | --- | --- | --- |
-| pT(gamma) | `photon_pt[llphoton_iph[0]]` | 0-100 GeV | 50 |
+| pT(gamma) | `photon_pt[llphoton_iph[0]]` | 15-100 GeV | 50 |
 | pT(ll) | `ll_pt[llphoton_ill[0]]` | 0-200 GeV | 50 |
 | pT(llgamma) | `llphoton_pt[0]` | 0-200 GeV | 50 |
 | m(ll) | `ll_m[llphoton_ill[0]]` | 80-100 GeV | 35 |
@@ -30,7 +31,22 @@ branch schema is required, not the BDT variables.
 Test with `python3 tools/plotter/tests/check_kinematics_plotter.py`; its preview
 is `/tmp/ggF_kinematics_synthetic_check.png`.
 
-## BDT-input plotter
+## Optional HJ-only w_nnlo removal
+
+    python3 tools/plotter/plot_ggF_kinematics_wnnlo_removed.py 2022
+
+This is a copy of the six-variable kinematics plotter. Its only physics change
+is HJ's plotting weight `weight / w_nnlo`; Central retains `weight`. Inputs,
+variables, ranges, binning, event counts, styling, ratios, signed-weight handling,
+and unit-integral normalization are unchanged. The output has its own name:
+`plots/ggF_kinematics_wnnlo_removed_2022.png`. Only HJ requires the scalar
+`w_nnlo` branch. A zero/non-finite divisor or non-finite resulting plotting
+weight stops the run explicitly, without silently skipping or substituting
+events. No pico files or original plotter scripts are modified.
+
+Test: `python3 tools/plotter/tests/check_wnnlo_removed_plotter.py`.
+
+## BDT-input plotter usage
 
 With CMSSW/PyROOT active, run from the repository root:
 

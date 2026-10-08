@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Compare six HJ/central ggF kinematic shapes in baseline-selected picos.
+"""Compare six pico kinematic shapes, removing w_nnlo only from HJ weights.
 
-Usage: python3 tools/plotter/plot_ggF_kinematics.py 2022
+Usage: python3 tools/plotter/plot_ggF_kinematics_wnnlo_removed.py 2022
 Read all configured baseline pico files; produce one 3x2 comparison PNG.
+HJ plotting_weight = weight / w_nnlo; Central plotting_weight = weight.
 """
 
 import argparse
@@ -70,7 +71,7 @@ def parse_arguments(argv=None):
     return parser, parser.parse_args(argv)
 
 
-def validate_files(root, files):
+def validate_files(root, files, remove_nnlo=False):
     entries = 0
     for index, filename in enumerate(files, 1):
         source = root.TFile.Open(filename, "READ")
@@ -82,7 +83,8 @@ def validate_files(root, files):
             tree = source.Get("tree")
             if not tree or not tree.InheritsFrom("TTree"):
                 raise ValueError("Missing pico tree 'tree': " + filename)
-            missing = [name for name in REQUIRED_BRANCHES if not tree.GetBranch(name)]
+            required = REQUIRED_BRANCHES + (("w_nnlo",) if remove_nnlo else ())
+            missing = [name for name in required if not tree.GetBranch(name)]
             if missing:
                 raise ValueError("Missing pico branches in {}: {}".format(filename, ", ".join(missing)))
             entries += int(tree.GetEntries())
@@ -95,7 +97,7 @@ def validate_files(root, files):
     return entries
 
 
-def book_histograms(root, files, sample_name):
+def book_histograms(root, files, sample_name, remove_nnlo=False):
     if not root.gInterpreter.Declare(CPP_HELPERS):
         raise RuntimeError("ROOT could not compile the kinematic variable helpers.")
     root.TH1.SetDefaultSumw2(True)
@@ -104,8 +106,16 @@ def book_histograms(root, files, sample_name):
         inputs.push_back(filename)
     frame = root.RDataFrame("tree", inputs)
     total = frame.Count()
-    weighted = frame.Define("hj_kin_weight", "static_cast<double>(weight)")
-    finite = weighted.Filter("std::isfinite(hj_kin_weight)", "Finite stored pico weight")
+    weight_expression = "static_cast<double>(weight)"
+    if remove_nnlo:
+        # Refuse invalid corrections rather than silently dropping events or
+        # replacing their weights. Negative nonzero corrections remain valid.
+        weight_expression = (
+            "std::isfinite(static_cast<double>(w_nnlo)) && w_nnlo != 0. "
+            "? static_cast<double>(weight) / static_cast<double>(w_nnlo) "
+            ": std::numeric_limits<double>::quiet_NaN()")
+    weighted = frame.Define("hj_kin_weight", weight_expression)
+    finite = weighted.Filter("std::isfinite(hj_kin_weight)", "Finite plotting weight")
     usable = finite.Count()
     sumw = finite.Sum("hj_kin_weight")
     values = finite.Define("hj_kin_values", "hjpicokin::build(photon_pt, ll_pt, ll_m, "
@@ -121,7 +131,7 @@ def book_histograms(root, files, sample_name):
             (sample_name + "_kin_" + column, "", bins, low, high), scalar, "hj_kin_weight"))
     total_events = int(total.GetValue())
     if int(usable.GetValue()) != total_events:
-        raise ValueError("{} contains non-finite stored weights; refusing to silently drop events.".format(sample_name))
+        raise ValueError("{} contains non-finite plotting weights or invalid w_nnlo; refusing to silently drop events.".format(sample_name))
     histograms = []
     for action in actions:
         hist = action.GetValue().Clone()
@@ -149,17 +159,18 @@ def main():
             directory = SAMPLE_DIRECTORIES[args.year][key]
             files, _ = list_pico_files(directory)
             print("{}: ALL {} pico ROOT files in {}".format(sample, len(files), directory), flush=True)
-            entries = validate_files(ROOT, files)
-            histograms, summary = book_histograms(ROOT, files, sample.lower())
+            remove_nnlo = key == "private"
+            entries = validate_files(ROOT, files, remove_nnlo=remove_nnlo)
+            histograms, summary = book_histograms(ROOT, files, sample.lower(), remove_nnlo=remove_nnlo)
             if summary["total"] != entries:
                 raise RuntimeError("Input event count changed while reading " + sample)
-            print("{}: {:,} baseline events; sum(weight)={:.8g}".format(
+            print("{}: {:,} baseline events; sum(plotting_weight)={:.8g}".format(
                 sample, entries, summary["sumw"]), flush=True)
             for panel, count in zip(PANELS, summary["counts"]):
                 print("  {}: N={:,}, undefined/no-object={:,}".format(panel[0], count, entries - count))
             samples[sample] = histograms
             event_counts[sample] = summary["counts"]
-        output = Path(__file__).resolve().parents[2] / "plots" / ("ggF_kinematics_" + args.year + ".png")
+        output = Path(__file__).resolve().parents[2] / "plots" / ("ggF_kinematics_wnnlo_removed_" + args.year + ".png")
         draw_plots(ROOT, samples["Central"], samples["Private"], args.year, output,
                    event_counts=event_counts, panels=PANELS, columns=3, panel_size=(600, 700),
                    reference_lines={"m_ll": 91.2, "m_llgamma": 125.}, legend_text_size=0.040)

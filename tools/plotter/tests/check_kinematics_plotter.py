@@ -73,7 +73,7 @@ def main():
     keys = [panel[0] for panel in plotter.PANELS]
     assert keys == ["pt_gamma", "pt_ll", "pt_llgamma", "m_ll", "m_llgamma", "npv"]
     assert [panel[3:] for panel in plotter.PANELS] == [
-        (50, 0., 100.), (50, 0., 200.), (50, 0., 200.),
+        (50, 15., 100.), (50, 0., 200.), (50, 0., 200.),
         (35, 80., 100.), (50, 100., 150.), (70, 0., 70.)]
     negative = event()
     negative.update(weight=-0.5, photon_pt=[10., 70.], ll_pt=[900., 60.],
@@ -139,6 +139,7 @@ def main():
         assert draw.call_args.kwargs["columns"] == 3
         assert draw.call_args.kwargs["panel_size"] == (600, 700)
         assert draw.call_args.kwargs["legend_text_size"] == 0.040
+        assert draw.call_args.kwargs["reference_lines"] == {"m_ll": 91.2, "m_llgamma": 125.}
         assert draw.call_args.kwargs["event_counts"] == {"Central": summary["counts"], "Private": summary["counts"]}
 
         central = [h.Clone("central_" + key) for key, h in zip(keys, histograms)]
@@ -166,16 +167,16 @@ def main():
                 assert axes.GetXaxis().GetXmin() == plotter.PANELS[index - 1][4]
                 assert axes.GetXaxis().GetXmax() == plotter.PANELS[index - 1][5]
                 lines = [p for p in top.GetListOfPrimitives() if p.InheritsFrom("TLine")]
-                assert len(lines) == (1 if index == 5 else 0)
+                assert len(lines) == (1 if index in (4, 5) else 0)
                 if lines:
-                    assert lines[0].GetX1() == lines[0].GetX2() == 125.
+                    assert lines[0].GetX1() == lines[0].GetX2() == {4: 91.2, 5: 125.}[index]
                     assert lines[0].GetLineColor() == ROOT.kBlack and lines[0].GetLineStyle() == 2
             original_close(canvas)
         with patch.object(ROOT.TCanvas, "Close", inspect_canvas):
             plotter.draw_plots(ROOT, central, private, "2022", output,
                                event_counts={"Central": summary["counts"], "Private": summary["counts"]},
                                panels=plotter.PANELS, columns=3, panel_size=(600, 700),
-                               reference_lines={"m_llgamma": 125.}, legend_text_size=0.040)
+                               reference_lines={"m_ll": 91.2, "m_llgamma": 125.}, legend_text_size=0.040)
         assert output.is_file() and output.stat().st_size > 0
         ratio = make_ratio(ROOT, private[0], central[0])
         assert all(math.isclose(ratio.GetPointY(i), 1.) for i in range(ratio.GetN()))

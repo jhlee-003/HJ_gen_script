@@ -17,3 +17,10 @@ dilepton and llgamma mass; primary-vertex count), run:
 
 Output: `plots/ggF_kinematics_2022.png`, one 3 x 2 image using the older, taller
 panel proportions. Both scripts use the same baseline pico directories.
+
+To remove the stored NNLO factor only from HJ's plotting weight:
+
+    python3 tools/plotter/plot_ggF_kinematics_wnnlo_removed.py 2022
+
+Output: `plots/ggF_kinematics_wnnlo_removed_2022.png`. HJ uses `weight/w_nnlo`;
+Central still uses `weight`. The original plotters are unchanged.
