@@ -24,3 +24,10 @@ To remove the stored NNLO factor only from HJ's plotting weight:
 
 Output: `plots/ggF_kinematics_wnnlo_removed_2022.png`. HJ uses `weight/w_nnlo`;
 Central still uses `weight`. The original plotters are unchanged.
+
+For the same HJ-only weight change in all 19 BDT variables:
+
+    python3 tools/plotter/plot_ggF_BDT_var_wnnlo_removed.py 2022
+
+Outputs: `plots/ggF_BDT_var_wnnlo_removed_2022_1.png`, `_2.png`, and `_3.png`.
+The original BDT format, axes, normalization and overflow handling are retained.

@@ -48,6 +48,20 @@ Test: `python3 tools/plotter/tests/check_wnnlo_removed_plotter.py`.
 
 ## BDT-input plotter usage
 
+For the same 19 BDT variables with HJ-only NNLO-factor removal, run:
+
+    python3 tools/plotter/plot_ggF_BDT_var_wnnlo_removed.py 2022
+
+This standalone copy uses HJ `weight / w_nnlo` and Central `weight`, with all
+variables, selections, binning, legends, ratios, normalization and overflow
+handling otherwise unchanged. Outputs have separate names:
+`plots/ggF_BDT_var_wnnlo_removed_2022_1.png`, `_2.png`, and `_3.png`.
+Only HJ requires `w_nnlo`; zero/non-finite divisors and non-finite resulting
+weights stop the run, while signed nonzero weights/corrections remain valid.
+The original BDT plotter and input picos are not modified.
+
+Test: `python3 tools/plotter/tests/check_bdt_wnnlo_removed_plotter.py`.
+
 With CMSSW/PyROOT active, run from the repository root:
 
     python3 tools/plotter/plot_ggF_BDT_var.py 2022
