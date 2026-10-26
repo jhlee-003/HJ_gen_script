@@ -1,5 +1,12 @@
 # HJ analysis tools
 
+To compare the `w_nnlo` correction itself using unit event weights:
+
+    python3 tools/plotter/plot_ggF_wnnlo.py 2022
+
+Output: `plots/ggF_wnnlo_2022.png`, a unit-area central/private overlay and ratio.
+The common range covers both samples; no additional baseline/object cuts.
+
 - [Baseline workflow](baseline/README.md): convert NanoAOD to pico and save baseline-selected events.
 - [Pico plotter](plotter/README.md): compare 19 weighted ggF BDT-input shapes between HJ and central ggF picos.
 

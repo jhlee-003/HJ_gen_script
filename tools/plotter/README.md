@@ -1,5 +1,29 @@
 # Baseline-pico ggF BDT-input comparison
 
+## Direct w_nnlo comparison
+
+    python3 tools/plotter/plot_ggF_wnnlo.py 2022
+
+Creates one `plots/ggF_wnnlo_2022.png`: central ggF versus private HJ, with
+unit-area histograms, a Private/Central ratio (0-2), and a black dashed
+reference at `w_nnlo = 1`. Each baseline event contributes exactly one, NOT
+`weight`, `weight/w_nnlo`, or `w_nnlo`, so this diagnoses the correction-factor
+distribution itself rather than a physics-weighted shape. `N=` is the raw
+number of baseline events. All existing year-configured pico files are used;
+no additional object/event selections are applied.
+
+Both samples must contain a finite floating-point scalar `w_nnlo`. Missing or
+non-finite values cause an explicit error, not substitution with unity or
+silent event removal. Zero and negative corrections remain visible. No other
+pico branches are needed. The script prints each sample's min/mean/max and
+uses 60 common bins spanning both samples (including unity) with padding.
+This prevents artificial endpoint peaks from range truncation. An initial
+statistics pass determines the shared range, then a second pass fills the
+unweighted histograms. ROOT files are read remotely, not copied or modified.
+Keep `plot_ggF_BDT_var.py` alongside this script for the shared inputs/renderer.
+
+Test: `python3 tools/plotter/tests/check_wnnlo_plotter.py`.
+
 ## Six-variable kinematics plotter
 
     python3 tools/plotter/plot_ggF_kinematics.py 2022
