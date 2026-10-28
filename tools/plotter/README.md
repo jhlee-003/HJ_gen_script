@@ -1,5 +1,35 @@
 # Baseline-pico ggF BDT-input comparison
 
+## Generator Higgs pT comparison
+
+    python3 tools/plotter/plot_ggF_Higgs_pT.py 2022
+
+Creates `plots/ggF_Higgs_pT_2022.png`, comparing the exact generator Higgs
+pT used as the nano2pico NNLO-lookup input. For each event, select the highest
+array index with `mc_id == 25` and use `mc_pt` at that index directly. Multiple
+Higgs copies contribute one value per event. Do not select the maximum pT,
+require `isLastCopy`, sum the copies, or reconstruct the Higgs from Zgamma.
+
+Uses the shared year-configured input directories and renderer from
+`plot_ggF_BDT_var.py`: unit event weights in both samples, independently
+unit-normalized shapes, counting errors, Central red / Private blue, raw
+plotted-event `N=` counts, and a Private/Central ratio from 0 to 2. The plot
+uses 50 common bins over 0-500 GeV; overflow is folded into the last bin.
+Each event contributes exactly one before normalization. Pico `weight` and
+`w_nnlo` are not read or applied.
+
+Requires only `mc_id` and `mc_pt` in each pico `tree`. Applies no
+additional baseline, object, status-flag, or sample-type cuts. Events without
+a saved Higgs have no pT to plot and are omitted with explicit counts.
+The script prints zero/one/multiple-Higgs record counts for each sample.
+Unequal particle-vector lengths or invalid last-Higgs pT (negative/non-finite)
+stop the run instead of silently selecting another copy. Zero pT is retained.
+All actions run in one event loop per
+sample. Input files are read without modification.
+
+Test: `python3 tools/plotter/tests/check_higgs_pt_plotter.py`; synthetic preview:
+`/tmp/ggF_Higgs_pT_synthetic_check.png`.
+
 ## Direct w_nnlo comparison
 
     python3 tools/plotter/plot_ggF_wnnlo.py 2022
