@@ -16,6 +16,10 @@ unit-normalized shapes, counting errors, Central red / Private blue, raw
 plotted-event `N=` counts, and a Private/Central ratio from 0 to 2. The plot
 uses every NNLO lookup bin through 500 GeV, with edges:
 `0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 100, 150, 200, 300, 400, 500`.
+All 16 intervals are drawn with equal visual width and labeled by their
+physical pT ranges (0-5, 5-10, ..., 400-500 GeV). This categorical display
+copies bin counts and errors exactly; it does not rebin in pT or divide by
+the physical interval widths. The Private/Central ratio is unchanged.
 Events with pT >= 500 GeV are reported and omitted from the plot.
 Each histogram is normalized using the events in the displayed range. Heights are event
 fractions per bin (`A.U. / bin`), without dividing by the variable bin widths.

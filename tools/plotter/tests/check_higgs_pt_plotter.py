@@ -14,7 +14,7 @@ import ROOT
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import plot_ggF_Higgs_pT as plotter
-from plot_ggF_BDT_var import normalize_histogram
+from plot_ggF_BDT_var import normalize_histogram, make_ratio
 
 ROOT.PyConfig.IgnoreCommandLineOptions = True
 ROOT.gROOT.SetBatch(True)
@@ -95,6 +95,24 @@ def main():
         assert folded.GetBinContent(folded.GetNbinsX()) == 0.
         assert math.isclose(folded.GetBinContent(folded.FindBin(75.)), 0.25)
 
+        # Display remapping preserves every count/error and changes only x.
+        display = plotter.equal_width_display(ROOT, hist)
+        assert display.GetEntries() == hist.GetEntries()
+        assert display.GetNbinsX() == hist.GetNbinsX()
+        for b in range(1, hist.GetNbinsX() + 1):
+            assert display.GetBinWidth(b) == 1.
+            assert display.GetXaxis().GetBinLabel(b) == plotter.PT_BIN_LABELS[b - 1]
+            assert display.GetBinContent(b) == hist.GetBinContent(b)
+            assert display.GetBinError(b) == hist.GetBinError(b)
+        assert tuple(hist.GetXaxis().GetXbins()) == plotter.PT_BIN_EDGES
+        # Ratio values/errors are invariant under the category remapping.
+        physical_ratio = make_ratio(ROOT, hist, hist)
+        display_ratio = make_ratio(ROOT, display, display)
+        assert display_ratio.GetN() == physical_ratio.GetN()
+        for point in range(physical_ratio.GetN()):
+            assert display_ratio.GetPointY(point) == physical_ratio.GetPointY(point)
+            assert display_ratio.GetErrorY(point) == physical_ratio.GetErrorY(point)
+
         # Full lookup binning, including 200-300, 300-400, and 400-500 GeV.
         # Boundaries are lower-inclusive; 500 and above are counted separately.
         assert plotter.PT_BIN_EDGES == (
@@ -162,7 +180,11 @@ def main():
         call = draw.call_args
         assert call.args[4].name == "ggF_Higgs_pT_2022.png"
         assert call.kwargs["event_counts"] == {"Central": (3,), "Private": (4,)}
-        assert call.kwargs["panels"] == plotter.PANELS
+        assert call.kwargs["panels"] == plotter.DISPLAY_PANELS
+        for display_hist in call.args[1] + call.args[2]:
+            assert display_hist.GetBinWidth(1) == display_hist.GetBinWidth(16) == 1.
+            assert display_hist.GetXaxis().GetBinLabel(1) == "0-5"
+            assert display_hist.GetXaxis().GetBinLabel(16) == "400-500"
         output = Path("/tmp/ggF_Higgs_pT_synthetic_check.png")
         real_draw(*call.args[:4], output, **call.kwargs)
         assert output.is_file() and output.stat().st_size > 0

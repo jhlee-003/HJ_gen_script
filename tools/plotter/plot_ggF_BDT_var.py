@@ -278,6 +278,7 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
     for index, (central, private, panel) in enumerate(
             zip(central_histograms, private_histograms, panels), start=1):
         canvas.cd(index)
+        categorical = bool(central.GetXaxis().GetLabels())
         top = root.TPad("hj_top_" + str(index), "", 0., 0.30, 1., 1.)
         bottom = root.TPad("hj_ratio_" + str(index), "", 0., 0., 1., 0.30)
         for pad in (top, bottom):
@@ -287,7 +288,7 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         top.SetTopMargin(0.08)
         top.SetBottomMargin(0.025)
         bottom.SetTopMargin(0.025)
-        bottom.SetBottomMargin(0.36)
+        bottom.SetBottomMargin(0.55 if categorical else 0.36)
         top.Draw()
         bottom.Draw()
         keep.extend((top, bottom))
@@ -328,7 +329,7 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         private.Draw("E SAME")
         # Variable-width histograms show normalized bin populations. A single
         # fixed GeV width would mislabel them; fixed-width plotters keep theirs.
-        y_title = ("A.U. / bin" if central.GetXaxis().GetXbins().GetSize()
+        y_title = ("A.U. / bin" if categorical or central.GetXaxis().GetXbins().GetSize()
                    else "A.U. / {:g}{}".format(width, unit))
         keep.append(draw_y_title(root, top, y_title,
                                  "hj_y_title_top_" + str(index), x=y_title_x))
@@ -375,7 +376,10 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         for axis in (axis_hist.GetXaxis(), axis_hist.GetYaxis()):
             axis.SetTitleSize(0.125)
             axis.SetLabelSize(0.108)
-        axis_hist.GetXaxis().SetTitleOffset(0.92)
+        axis_hist.GetXaxis().SetTitleOffset(2.4 if categorical else 0.92)
+        if categorical:
+            axis_hist.GetXaxis().LabelsOption("v")
+            axis_hist.GetXaxis().SetLabelSize(0.085)
         axis_hist.GetXaxis().SetLabelOffset(0.015)
         axis_hist.GetXaxis().SetNdivisions(510)
         axis_hist.GetYaxis().SetNdivisions(505)

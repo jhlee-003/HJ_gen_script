@@ -21,6 +21,13 @@ PANELS = (
     ("higgs_pt", "Generator Higgs transverse momentum", "p_{T}(H_{gen}) [GeV]",
      len(PT_BIN_EDGES) - 1, PT_BIN_EDGES[0], PT_BIN_EDGES[-1]),
 )
+# Plot the original intervals as categories with identical visual widths.
+PT_BIN_LABELS = tuple("{:g}-{:g}".format(low, high)
+                      for low, high in zip(PT_BIN_EDGES, PT_BIN_EDGES[1:]))
+DISPLAY_PANELS = (
+    ("higgs_pt", "Generator Higgs transverse momentum", "p_{T}(H_{gen}) interval [GeV]",
+     len(PT_BIN_LABELS), 0., float(len(PT_BIN_LABELS))),
+)
 REQUIRED_BRANCHES = ("mc_id", "mc_pt")
 
 CPP_HELPERS = r"""
@@ -145,6 +152,26 @@ def book_histograms(root, files, sample_name):
     }
 
 
+def equal_width_display(root, hist):
+    """Copy lookup-bin counts/errors into equally spaced, labeled display bins."""
+    bins = len(PT_BIN_LABELS)
+    if hist.GetNbinsX() != bins:
+        raise ValueError("Unexpected number of generator Higgs pT lookup bins.")
+    display = root.TH1D(hist.GetName() + "_equal_width", "", bins, 0., float(bins))
+    display.SetDirectory(0)
+    display.Sumw2()
+    for index in range(bins + 2):
+        display.SetBinContent(index, hist.GetBinContent(index))
+        display.SetBinError(index, hist.GetBinError(index))
+    for index, label in enumerate(PT_BIN_LABELS, 1):
+        display.GetXaxis().SetBinLabel(index, label)
+    # ROOT enables label-axis extension; freeze it so overflow handling cannot
+    # silently double the number of categories during normalization.
+    display.SetCanExtend(root.TH1.kNoAxis)
+    display.SetEntries(hist.GetEntries())
+    return display
+
+
 def main():
     parser, args = parse_arguments()
     try:
@@ -169,10 +196,11 @@ def main():
                    "multiple Higgs={multiple_higgs:,}").format(sample, **summary), flush=True)
             print("  Plotted N={:,}; pT >= {:g} GeV omitted={:,}; unit event weights".format(
                 summary["counts"][0], PT_BIN_EDGES[-1], summary["above_range"]), flush=True)
-            samples[sample], event_counts[sample] = histograms, summary["counts"]
+            samples[sample] = [equal_width_display(ROOT, hist) for hist in histograms]
+            event_counts[sample] = summary["counts"]
         output = Path(__file__).resolve().parents[2] / "plots" / ("ggF_Higgs_pT_" + args.year + ".png")
         draw_plots(ROOT, samples["Central"], samples["Private"], args.year, output,
-                   event_counts=event_counts, panels=PANELS, columns=1,
+                   event_counts=event_counts, panels=DISPLAY_PANELS, columns=1,
                    panel_size=(900, 800), legend_text_size=0.040, y_title_x=0.11)
         print("Saved " + str(output), flush=True)
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
