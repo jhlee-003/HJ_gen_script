@@ -7,16 +7,14 @@ Use all configured baseline pico files; apply no further event/object cuts.
 """
 
 import argparse
-import math
 from pathlib import Path
 import subprocess
-import struct
 
 from plot_ggF_BDT_var import SAMPLE_DIRECTORIES, configured_year, list_pico_files, draw_plots
 
 # Pinned from richstu/nano2pico, tag htozgamma_sequoia_v1:
 # data/zgamma/GluGluHToZG_NNLO_reweight_run{2,3}.json.
-# Keep all digits; protect both these doubles and their stored float versions.
+# Keep all digits; category matching accepts the stored Float_t representation.
 LOOKUP_WEIGHTS = {
     "run2": (
         1.2754058804973247,
@@ -115,118 +113,48 @@ def lookup_weights(year):
     return LOOKUP_WEIGHTS[run]
 
 
-def protected_groups(values):
-    """Keep each lookup double and its Float_t representation in the same bin."""
-    groups = []
-    for value in sorted(set(float(value) for value in values)):
-        stored = struct.unpack("f", struct.pack("f", value))[0]
-        groups.append((min(value, stored), max(value, stored)))
-    if len(groups) < 3 or any(left[1] >= right[0] for left, right in zip(groups, groups[1:])):
-        raise ValueError("Need at least three distinct, float-resolvable lookup values.")
-    return tuple(groups)
+def category_values(year):
+    """Sixteen lookup values plus unity, sorted by the correction itself."""
+    return tuple(sorted(set((*lookup_weights(year), 1.))))
 
 
-def separates_values(binning, groups, low, high):
-    bins, start, stop = binning
-    if not start < low <= high < stop:
-        return False
-    width = (stop - start) / bins
-    occupied = set()
-    for first, last in groups:
-        i = math.floor(bins * (first - start) / (stop - start))
-        j = math.floor(bins * (last - start) / (stop - start))
-        if i != j or not 0 <= i < bins or i in occupied:
-            return False
-        # Leave room for floating-point evaluation of bin indices in ROOT.
-        margin = min(first - (start + i * width), start + (i + 1) * width - last)
-        if margin <= 64 * math.ulp(max(abs(first), abs(last), 1.)):
-            return False
-        occupied.add(i)
-    return True
+def category_expression(values):
+    # Compare at Float_t precision to accept both JSON doubles and their
+    # stored pico floats, without snapping unrelated corrections to a bin.
+    constants = ", ".join(format(value, ".17g") for value in values)
+    return (
+        "const double expected[] = {" + constants + "}; "
+        "const float value = static_cast<float>(hj_nnlo_value); "
+        "for (unsigned int i = 0; i < sizeof(expected)/sizeof(expected[0]); ++i) { "
+        "  if (value == static_cast<float>(expected[i])) return static_cast<int>(i + 1); "
+        "} return 0;"
+    )
 
 
-def minimum_uniform_grid(groups, low, high):
-    """Minimize uniform-bin count over width AND origin, without extra packages.
-
-    The order of point phases x modulo width changes only at widths
-    (x_j-x_i)/k. Between consecutive such widths, and consecutive point
-    phases, bin membership is constant. Search those cells, rather than a
-    sampled grid of widths/offsets. Protect Float_t/Double_t envelopes from
-    splitting and keep range extrema strictly inside the histogram.
-    """
-    if not math.isfinite(low) or not math.isfinite(high) or low >= high:
-        raise ValueError("Need a finite nonempty w_nnlo range.")
-    span = high - low
-    padding = max(0.05 * span, 0.05 * max(abs(low), abs(high), 1.))
-    start, stop = low - padding, high + padding
-    if not math.isfinite(stop - start):
-        raise ValueError("w_nnlo values are too large for a finite plotting range.")
-
-    # A guaranteed feasible starting grid: bins narrower than the smallest
-    # gap can never combine two groups. Search counts, not only that bound.
-    bins = len(groups)
-    while not separates_values((bins, start, stop), groups, low, high):
-        bins += 1
-    best = bins, start, stop
-    if bins == len(groups):
-        return best
-
-    # Any improvement must cover the span with at most bins-1 bins. Three
-    # adjacent groups need two boundaries, limiting their boundary spacing.
-    min_width = span / (bins - 1)
-    max_width = min(groups[i + 2][0] - groups[i][1]
-                    for i in range(len(groups) - 2))
-    if min_width >= max_width:
-        return best
-    points = sorted({low, high, *(value for group in groups for value in group)})
-    critical = {min_width, max_width}
-    for index, first in enumerate(points):
-        for last in points[index + 1:]:
-            difference = last - first
-            first_k = max(1, math.ceil(difference / max_width))
-            last_k = math.floor(difference / min_width)
-            for k in range(first_k, last_k + 1):
-                width = difference / k
-                if min_width < width < max_width:
-                    critical.add(width)
-
-    widths = sorted(critical, reverse=True)
-    for upper, lower in zip(widths, widths[1:]):
-        if upper <= span / (best[0] - 1):
-            break  # Smaller widths cannot improve the current bin count.
-        width = lower + (upper - lower) / 2.
-        phases = sorted({0., width, *(point % width for point in points)})
-        for left, right in zip(phases, phases[1:]):
-            origin = left + (right - left) / 2.
-            first_bin = math.floor((low - origin) / width)
-            last_bin = math.floor((high - origin) / width)
-            bins = last_bin - first_bin + 1
-            if bins >= best[0]:
-                continue
-            start = origin + first_bin * width
-            candidate = bins, start, start + bins * width
-            if separates_values(candidate, groups, low, high):
-                best = candidate
-    return best
-
-
-def optimal_binning(summaries, year):
-    """Cover ALL observed events and separate the year's lookup values + unity."""
-    groups = protected_groups((*lookup_weights(year), 1.))
-    low = min(groups[0][0], *(summary["min"] for summary in summaries))
-    high = max(groups[-1][1], *(summary["max"] for summary in summaries))
-    return minimum_uniform_grid(groups, low, high)
-
-
-def book_histogram(frame, sample_name, binning):
-    bins, low, high = binning
-    # No third (weight) argument: every event contributes exactly one.
-    action = frame.Histo1D((sample_name + "_wnnlo", "", bins, low, high), "hj_nnlo_value")
+def book_histogram(frame, sample_name, year):
+    values = category_values(year)
+    bins = len(values)
+    categorized = frame.Define("hj_nnlo_bin", category_expression(values))
+    unknown = categorized.Filter("hj_nnlo_bin == 0")
+    unknown_count = unknown.Count()
+    unknown_min = unknown.Min("hj_nnlo_value")
+    unknown_max = unknown.Max("hj_nnlo_value")
+    # No weight argument: one event contributes one to its correction category.
+    action = categorized.Filter("hj_nnlo_bin > 0").Histo1D(
+        (sample_name + "_wnnlo", "", bins, 0.5, bins + 0.5), "hj_nnlo_bin")
+    missing = int(unknown_count.GetValue())
+    if missing:
+        raise ValueError(
+            "{}: {:,} events have unknown w_nnlo values (range {:.17g} to {:.17g}); "
+            "expected the lookup corrections or 1, allowing Float_t rounding.".format(
+                sample_name, missing, unknown_min.GetValue(), unknown_max.GetValue()))
     hist = action.GetValue().Clone()
     hist.SetDirectory(0)
-    if hist.GetBinContent(0) or hist.GetBinContent(hist.GetNbinsX() + 1):
-        raise RuntimeError("Optimized w_nnlo range left events outside the histogram.")
+    for index in range(1, bins + 1):
+        hist.GetXaxis().SetBinLabel(index, str(index))
+    hist.SetCanExtend(hist.kNoAxis)
     return hist
+
 
 
 def main():
@@ -253,11 +181,14 @@ def main():
             frames[sample], summaries[sample] = frame, summary
             print("{}: N={total:,}; w_nnlo min={min:.8g}, mean={mean:.8g}, max={max:.8g}".format(
                 sample, **summary), flush=True)
-        binning = optimal_binning(list(summaries.values()), args.year)
-        bins, low, high = binning
-        print("Optimal uniform w_nnlo grid: {} bins; width={:.12g}; range [{:.12g}, {:.12g})".format(
-            bins, (high - low) / bins, low, high), flush=True)
-        histograms = {sample: book_histogram(frame, sample.lower(), binning)
+        values = category_values(args.year)
+        bins = len(values)
+        unity_bin = values.index(1.) + 1
+        print("Numbered w_nnlo categories (ascending; unit event weights):", flush=True)
+        for index, value in enumerate(values, 1):
+            print("  {:2d}: {!r}{}".format(
+                index, value, "  [unity reference]" if value == 1. else ""), flush=True)
+        histograms = {sample: book_histogram(frame, sample.lower(), args.year)
                       for sample, frame in frames.items()}
         for sample, hist in histograms.items():
             if hist.GetEntries() != summaries[sample]["total"]:
@@ -265,9 +196,10 @@ def main():
         output = Path(__file__).resolve().parents[2] / "plots" / ("ggF_wnnlo_" + args.year + ".png")
         draw_plots(ROOT, [histograms["Central"]], [histograms["Private"]], args.year, output,
                    event_counts={sample: (summary["total"],) for sample, summary in summaries.items()},
-                   panels=(("w_nnlo", "NNLO correction factor", "w_{NNLO}", bins, low, high),),
+                   panels=(("w_nnlo", "NNLO correction category", "w_{NNLO} category (ascending)",
+                            bins, 0.5, bins + 0.5),),
                    columns=1, panel_size=(900, 800), legend_text_size=0.040,
-                   reference_lines={"w_nnlo": 1.}, y_title_x=0.11)
+                   reference_lines={"w_nnlo": float(unity_bin)}, y_title_x=0.11)
         print("Saved " + str(output), flush=True)
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         parser.exit(1, "w_nnlo comparison failed: {}\n".format(error))

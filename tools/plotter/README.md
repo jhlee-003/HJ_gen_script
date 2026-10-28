@@ -43,37 +43,33 @@ Test: `python3 tools/plotter/tests/check_higgs_pt_plotter.py`; synthetic preview
     python3 tools/plotter/plot_ggF_wnnlo.py 2022
 
 Creates one `plots/ggF_wnnlo_2022.png`: central ggF versus private HJ, with
-unit-area histograms, a Private/Central ratio (0-2), and a black dashed
-reference at `w_nnlo = 1`. Each baseline event contributes exactly one, NOT
-`weight`, `weight/w_nnlo`, or `w_nnlo`, so this diagnoses the correction-factor
-distribution itself rather than a physics-weighted shape. `N=` is the raw
-number of baseline events. All existing year-configured pico files are used;
-no additional object/event selections are applied.
+unit-area histograms and a Private/Central ratio (0-2). Every event contributes
+one; no pico `weight` or other event weight is read or applied. All configured
+baseline files are used, without further physics selections.
 
-Both samples must contain a finite floating-point scalar `w_nnlo`. Missing or
-non-finite values cause an explicit error, not substitution with unity or
-silent event removal. Zero and negative corrections remain visible. No other
-pico branches are needed. The script prints each sample's min/mean/max and
-uses equal numerical bin widths with the minimum bin count that separates
-all 16 lookup corrections plus the fallback value 1. The optimizer varies
-both the width and starting edge, allowing empty bins. It searches changes
-in point phases analytically, not a sampled grid, and protects both the
-JSON double and stored Float_t representation of each correction from
-splitting across bins. Run 2/Run 3 values are pinned in the script from the
-sequoia lookup JSONs; the year chooses the relevant table. No runtime
-download or extra optimization package is required.
+The x-axis has 17 equal-width numbered categories: the year's 16 NNLO lookup
+corrections, sorted from smallest to largest, plus the fallback value 1.
+This replaces the sparse uniform grid in correction-value space. For Run 3,
+category 1 is 0.9251468016571035, category 8 is 1, and category 17 is
+1.6961873040033373. The dashed unity reference is drawn through the center
+of category 8. Number labels stay horizontal; the y-axis shows `A.U. / bin`.
+The script prints the full category-to-value mapping for presentation notes.
 
-For the unmodified Run 3 correction values and unity, the result is 84 bins
-with width approximately 0.00935607334. The grid also covers every observed
-value from both samples, so out-of-table extrema can change the optimum.
-All finite events remain included, without folding high/low corrections
-into an endpoint bin. An initial statistics pass determines the range,
-then a second pass fills the unweighted histograms. The chosen range,
-width, and bin count are printed. ROOT files are read remotely, not copied
-or modified.
-Keep `plot_ggF_BDT_var.py` alongside this script for the shared inputs/renderer.
+Run 2/Run 3 lookup values are pinned from the sequoia JSONs and selected by
+year, without runtime downloads. Matching accepts JSON doubles and their
+stored Float_t representation. Values that do not match a lookup correction
+or unity cause an explicit error with their count and range; they are not
+silently dropped or assigned to a neighboring category. Missing/non-scalar
+or non-finite `w_nnlo` also causes an explicit error. Only `tree/w_nnlo` is needed.
+
+The script prints each sample's event count and correction min/mean/max.
+An initial statistics pass is followed by one category-histogram pass.
+ROOT files are read remotely without copying or modification.
+Keep `plot_ggF_BDT_var.py` alongside this script for shared inputs and rendering.
 
 Test: `python3 tools/plotter/tests/check_wnnlo_plotter.py`.
+Synthetic preview: `/tmp/ggF_wnnlo_synthetic_check.png`.
+
 
 ## Six-variable kinematics plotter
 
