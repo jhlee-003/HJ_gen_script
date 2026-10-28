@@ -326,7 +326,11 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
             keep.append(reference)
         central.Draw("E SAME")
         private.Draw("E SAME")
-        keep.append(draw_y_title(root, top, "A.U. / {:g}{}".format(width, unit),
+        # Variable-width histograms show normalized bin populations. A single
+        # fixed GeV width would mislabel them; fixed-width plotters keep theirs.
+        y_title = ("A.U. / bin" if central.GetXaxis().GetXbins().GetSize()
+                   else "A.U. / {:g}{}".format(width, unit))
+        keep.append(draw_y_title(root, top, y_title,
                                  "hj_y_title_top_" + str(index), x=y_title_x))
         # Two aligned rows at opposite top corners, without a sample heading.
         names = root.TLegend(0.24, 0.72, 0.65, 0.88)

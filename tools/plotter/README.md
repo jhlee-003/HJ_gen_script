@@ -14,7 +14,11 @@ Uses the shared year-configured input directories and renderer from
 `plot_ggF_BDT_var.py`: unit event weights in both samples, independently
 unit-normalized shapes, counting errors, Central red / Private blue, raw
 plotted-event `N=` counts, and a Private/Central ratio from 0 to 2. The plot
-uses 50 common bins over 0-500 GeV; overflow is folded into the last bin.
+uses every NNLO lookup bin through 500 GeV, with edges:
+`0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 100, 150, 200, 300, 400, 500`.
+Events with pT >= 500 GeV are reported and omitted from the plot.
+Each histogram is normalized using the events in the displayed range. Heights are event
+fractions per bin (`A.U. / bin`), without dividing by the variable bin widths.
 Each event contributes exactly one before normalization. Pico `weight` and
 `w_nnlo` are not read or applied.
 
@@ -24,8 +28,8 @@ a saved Higgs have no pT to plot and are omitted with explicit counts.
 The script prints zero/one/multiple-Higgs record counts for each sample.
 Unequal particle-vector lengths or invalid last-Higgs pT (negative/non-finite)
 stop the run instead of silently selecting another copy. Zero pT is retained.
-All actions run in one event loop per
-sample. Input files are read without modification.
+All actions run in one event loop per sample. Input files are read without
+modification.
 
 Test: `python3 tools/plotter/tests/check_higgs_pt_plotter.py`; synthetic preview:
 `/tmp/ggF_Higgs_pT_synthetic_check.png`.

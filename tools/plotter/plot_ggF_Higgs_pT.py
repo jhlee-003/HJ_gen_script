@@ -8,14 +8,18 @@ Read all configured baseline picos without further physics selections.
 """
 
 import argparse
+from array import array
 from pathlib import Path
 import subprocess
 
 from plot_ggF_BDT_var import SAMPLE_DIRECTORIES, configured_year, list_pico_files, draw_plots
 
+# Full pT bin edges shared by the Run 2 and Run 3 NNLO lookup maps.
+PT_BIN_EDGES = (0., 5., 10., 15., 20., 25., 30., 40., 50., 60., 70.,
+                100., 150., 200., 300., 400., 500.)
 PANELS = (
     ("higgs_pt", "Generator Higgs transverse momentum", "p_{T}(H_{gen}) [GeV]",
-     50, 0., 500.),
+     len(PT_BIN_EDGES) - 1, PT_BIN_EDGES[0], PT_BIN_EDGES[-1]),
 )
 REQUIRED_BRANCHES = ("mc_id", "mc_pt")
 
@@ -105,10 +109,15 @@ def book_histograms(root, files, sample_name):
     valid = selected.Filter("std::isfinite(hj_higgs_pt) && hj_higgs_pt >= 0.",
                             "Valid last Higgs pT")
     selected_count, valid_count = selected.Count(), valid.Count()
-    column, _, _, bins, low, high = PANELS[0]
-    # No weight column: every event with a valid last Higgs contributes one.
-    action = valid.Histo1D((sample_name + "_" + column, "", bins, low, high),
-                          "hj_higgs_pt")
+    # Normalize within the displayed range; report higher-pT events separately.
+    in_range = valid.Filter("hj_higgs_pt < " + str(PT_BIN_EDGES[-1]))
+    above_range = valid.Filter("hj_higgs_pt >= " + str(PT_BIN_EDGES[-1])).Count()
+    plotted_count = in_range.Count()
+    column, _, _, bins, _, _ = PANELS[0]
+    # No weight column: every event in the plotted range contributes one.
+    action = in_range.Histo1D(
+        (sample_name + "_" + column, "", bins, array("d", PT_BIN_EDGES)),
+        "hj_higgs_pt")
     # Book histogram and diagnostics before triggering one event loop per sample.
     total_events = int(total.GetValue())
     if total_events == 0:
@@ -121,13 +130,17 @@ def book_histograms(root, files, sample_name):
     count = int(valid_count.GetValue())
     if count == 0:
         raise ValueError(sample_name + ": no saved Higgs; cannot plot generator Higgs pT.")
+    count = int(plotted_count.GetValue())
+    if count == 0:
+        raise ValueError(sample_name + ": no Higgs pT in plotting range [0, {:g}) GeV.".format(
+            PT_BIN_EDGES[-1]))
     hist = action.GetValue().Clone()
     hist.SetDirectory(0)
     return [hist], {
         "total": total_events, "no_higgs": int(no_higgs.GetValue()),
         "one_higgs": int(one_higgs.GetValue()),
         "multiple_higgs": int(multiple_higgs.GetValue()),
-        "counts": (count,),
+        "counts": (count,), "above_range": int(above_range.GetValue()),
         "event_loops": int(frame.GetNRuns()),
     }
 
@@ -154,8 +167,8 @@ def main():
                 raise RuntimeError("Input event count changed while reading " + sample)
             print(("{}: N={total:,}; no Higgs={no_higgs:,}, one Higgs={one_higgs:,}, "
                    "multiple Higgs={multiple_higgs:,}").format(sample, **summary), flush=True)
-            print("  Plotted N={:,}; unit event weights; events with no saved Higgs omitted".format(
-                summary["counts"][0]), flush=True)
+            print("  Plotted N={:,}; pT >= {:g} GeV omitted={:,}; unit event weights".format(
+                summary["counts"][0], PT_BIN_EDGES[-1], summary["above_range"]), flush=True)
             samples[sample], event_counts[sample] = histograms, summary["counts"]
         output = Path(__file__).resolve().parents[2] / "plots" / ("ggF_Higgs_pT_" + args.year + ".png")
         draw_plots(ROOT, samples["Central"], samples["Private"], args.year, output,

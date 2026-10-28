@@ -76,25 +76,51 @@ def main():
         histograms, summary = plotter.book_histograms(ROOT, files, "test")
         assert summary == {
             "total": 7, "no_higgs": 2, "one_higgs": 2, "multiple_higgs": 3,
-            "counts": (5,), "event_loops": 1,
+            "counts": (4,), "above_range": 1, "event_loops": 1,
         }, summary
         hist = histograms[0]
-        assert hist.GetEntries() == 5
+        assert hist.GetEntries() == 4
+        assert hist.GetNbinsX() == len(plotter.PT_BIN_EDGES) - 1
+        assert tuple(hist.GetXaxis().GetXbins()) == plotter.PT_BIN_EDGES
         # Select last matching index, not first, highest pT, or last particle.
         for pt in (35., 75., 0., 120.):
             assert hist.GetBinContent(hist.FindBin(pt)) == 1.
             assert math.isclose(hist.GetBinError(hist.FindBin(pt)) ** 2, 1.)
-        assert hist.Integral(0, hist.GetNbinsX() + 1) == hist.GetEntries() == 5.
+        assert hist.Integral(0, hist.GetNbinsX() + 1) == hist.GetEntries() == 4.
         assert hist.GetBinContent(hist.FindBin(210.)) == 0.
-        assert hist.GetBinContent(hist.GetNbinsX() + 1) == 1.
+        assert hist.GetBinContent(hist.GetNbinsX() + 1) == 0.
         folded = hist.Clone("folded_higgs_pt")
         normalize_histogram(folded)
         assert math.isclose(folded.Integral(), 1.)
-        assert math.isclose(folded.GetBinContent(folded.GetNbinsX()), 0.2)
-        assert math.isclose(folded.GetBinContent(folded.FindBin(75.)), 0.2)
+        assert folded.GetBinContent(folded.GetNbinsX()) == 0.
+        assert math.isclose(folded.GetBinContent(folded.FindBin(75.)), 0.25)
+
+        # Full lookup binning, including 200-300, 300-400, and 400-500 GeV.
+        # Boundaries are lower-inclusive; 500 and above are counted separately.
+        assert plotter.PT_BIN_EDGES == (
+            0., 5., 10., 15., 20., 25., 30., 40., 50., 60., 70.,
+            100., 150., 200., 300., 400., 500.)
+        bad = directory / "bad.root"
+        boundary_pts = (0., 4.99, 5., 9.99, 10., 199.99, 200., 249.99,
+                        250., 299.99, 300., 399.99, 400., 499.99, 500., 650.)
+        write_file(bad, [(1., [25], [pt]) for pt in boundary_pts])
+        boundary_hist, boundary_summary = plotter.book_histograms(ROOT, [str(bad)], "edges")
+        edge_hist = boundary_hist[0]
+        assert boundary_summary["counts"] == (14,)
+        assert boundary_summary["above_range"] == 2
+        assert edge_hist.GetBinContent(1) == 2.
+        assert edge_hist.GetBinContent(2) == 2.
+        assert edge_hist.GetBinContent(3) == 1.
+        assert edge_hist.GetBinContent(edge_hist.FindBin(200.)) == 4.
+        assert edge_hist.GetBinContent(edge_hist.GetNbinsX() - 1) == 2.
+        assert edge_hist.GetBinContent(edge_hist.GetNbinsX()) == 2.
+        normalize_histogram(edge_hist)
+        assert math.isclose(edge_hist.Integral(), 1.)
+        assert math.isclose(edge_hist.GetBinContent(edge_hist.GetNbinsX()), 2. / 14.)
+        write_file(bad, [(1., [25], [500.])])
+        expect_error("plotting range", plotter.book_histograms, ROOT, [str(bad)], "range")
 
         # A bad final Higgs cannot be replaced with an earlier good copy.
-        bad = directory / "bad.root"
         for pt in (float("nan"), float("inf"), -999.):
             write_file(bad, [(1., [25, 25], [50., pt])])
             expect_error("invalid last Higgs pT", plotter.book_histograms,
@@ -135,7 +161,7 @@ def main():
         assert draw.call_count == 1
         call = draw.call_args
         assert call.args[4].name == "ggF_Higgs_pT_2022.png"
-        assert call.kwargs["event_counts"] == {"Central": (3,), "Private": (5,)}
+        assert call.kwargs["event_counts"] == {"Central": (3,), "Private": (4,)}
         assert call.kwargs["panels"] == plotter.PANELS
         output = Path("/tmp/ggF_Higgs_pT_synthetic_check.png")
         real_draw(*call.args[:4], output, **call.kwargs)
