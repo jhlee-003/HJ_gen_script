@@ -54,10 +54,23 @@ Both samples must contain a finite floating-point scalar `w_nnlo`. Missing or
 non-finite values cause an explicit error, not substitution with unity or
 silent event removal. Zero and negative corrections remain visible. No other
 pico branches are needed. The script prints each sample's min/mean/max and
-uses 60 common bins spanning both samples (including unity) with padding.
-This prevents artificial endpoint peaks from range truncation. An initial
-statistics pass determines the shared range, then a second pass fills the
-unweighted histograms. ROOT files are read remotely, not copied or modified.
+uses equal numerical bin widths with the minimum bin count that separates
+all 16 lookup corrections plus the fallback value 1. The optimizer varies
+both the width and starting edge, allowing empty bins. It searches changes
+in point phases analytically, not a sampled grid, and protects both the
+JSON double and stored Float_t representation of each correction from
+splitting across bins. Run 2/Run 3 values are pinned in the script from the
+sequoia lookup JSONs; the year chooses the relevant table. No runtime
+download or extra optimization package is required.
+
+For the unmodified Run 3 correction values and unity, the result is 84 bins
+with width approximately 0.00935607334. The grid also covers every observed
+value from both samples, so out-of-table extrema can change the optimum.
+All finite events remain included, without folding high/low corrections
+into an endpoint bin. An initial statistics pass determines the range,
+then a second pass fills the unweighted histograms. The chosen range,
+width, and bin count are printed. ROOT files are read remotely, not copied
+or modified.
 Keep `plot_ggF_BDT_var.py` alongside this script for the shared inputs/renderer.
 
 Test: `python3 tools/plotter/tests/check_wnnlo_plotter.py`.
