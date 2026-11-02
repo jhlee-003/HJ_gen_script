@@ -38,6 +38,46 @@ modification.
 Test: `python3 tools/plotter/tests/check_higgs_pt_plotter.py`; synthetic preview:
 `/tmp/ggF_Higgs_pT_synthetic_check.png`.
 
+## NNLO/NLO versus the pT-dependent lookup
+
+    python3 tools/plotter/plot_ggF_NNLO_over_NLO.py 2022
+
+Creates plots/ggF_NNLO_over_NLO_2022.png. Treating private HJ as the candidate
+NNLO sample and central ggH_qme as the NLO reference, it overlays the measured
+unweighted shape ratio (n_HJ,i / N_HJ) / (n_ggH,i / N_ggH) with the original
+lookup w_i. Lookup values stay in pT-bin order, not the ascending correction
+order of the numbered w_nnlo plot.
+
+Because the samples are normalized separately, the plot also shows
+w_i / <w>_ggH, where <w>_ggH = sum(n_ggH,i * w_i) / N_ggH. This is the
+shape ratio predicted by applying the table to central and normalizing it.
+The lower panel divides the measured shape ratio by this shape-normalized
+lookup; unity is the shape-agreement reference. The ratio and correction
+curves themselves are not normalized to unit area.
+
+Uses the configured input directories, the same last mc_id == 25 selection,
+all 16 lookup pT intervals from 0 to 500 GeV, and equal visual interval widths.
+Events without a saved Higgs and events at or above 500 GeV are counted
+separately and omitted from both shape normalizations. Only mc_id and mc_pt
+are required; pico weight and w_nnlo are not applied. The script prints
+event counts and a per-bin numerical comparison.
+
+Error bars use independent binomial-fraction variances propagated with the
+delta method. Bins with zero central events have an undefined measured ratio
+and are omitted from the graphs with an explicit table entry. Lower-panel
+errors treat the estimated lookup normalization as fixed. No global chi-square
+or significance is inferred from these correlated shape bins; the symmetric
+approximation is limited for sparse/zero bins.
+
+This diagnoses selected, recorded event shapes. It does not establish that
+these samples, generator weights, selections, or normalization match the
+unspecified inputs originally used to derive the nano2pico table.
+The year selects the shared Run 2/Run 3 lookup in plot_ggF_wnnlo.py.
+
+Test: python3 tools/plotter/tests/check_nnlo_over_nlo_plotter.py.
+Synthetic preview: /tmp/ggF_NNLO_over_NLO_synthetic_check.png.
+
+
 ## Direct w_nnlo comparison
 
     python3 tools/plotter/plot_ggF_wnnlo.py 2022
