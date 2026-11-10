@@ -1,5 +1,28 @@
 # Baseline-pico ggF BDT-input comparison
 
+## Previous HJ versus private-gridpack HJ (NNLO removed from both)
+
+    python3 tools/plotter/plot_ggF_BDT_var_gridpack_wnnlo_removed.py 2022
+
+This standalone plotter compares all baseline pico files in:
+
+- Red, `HJ (previous)`: `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico`.
+- Blue, `HJ (private gridpack)`: `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022PrvGridpico`.
+
+**Both** samples use signed `weight / w_nnlo`, unlike the central/private
+plotters where only HJ has this factor removed. Missing `w_nnlo`, zero or
+non-finite divisors, and non-finite plotting weights cause explicit errors;
+there is no silent substitution or event loss. The 19 variable definitions,
+ordering (8 + 8 + 3), ranges, binning, fonts, unit-summed-weight normalization,
+weighted errors, folded edge bins, and per-panel unweighted `N=` counts are
+unchanged. No new object, baseline, or `type` selections are applied.
+The ratio is `New / Previous`, i.e. private-gridpack HJ divided by previous
+HJ, with the same 0-2 display range. The existing central comparisons and
+input picos are not changed.
+
+Outputs: `plots/ggF_BDT_var_gridpack_wnnlo_removed_2022_1.png`, `_2.png`, `_3.png`.
+Test: `python3 tools/plotter/tests/check_bdt_gridpack_plotter.py`.
+
 ## Generator Higgs pT comparison
 
     python3 tools/plotter/plot_ggF_Higgs_pT.py 2022

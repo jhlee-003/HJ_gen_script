@@ -1,5 +1,14 @@
 # HJ analysis tools
 
+To compare the previous HJ sample with the new private-gridpack HJ sample,
+removing `w_nnlo` from BOTH samples' plotting weights:
+
+    python3 tools/plotter/plot_ggF_BDT_var_gridpack_wnnlo_removed.py 2022
+
+Outputs: `plots/ggF_BDT_var_gridpack_wnnlo_removed_2022_1.png`, `_2.png`, `_3.png`.
+Inputs are `HJ2022pico` and `HJ2022PrvGridpico` under the configured EOS pico
+directory. The ratio is new/previous; the existing 19-variable BDT format is retained.
+
 To compare the `w_nnlo` correction itself using unit event weights:
 
     python3 tools/plotter/plot_ggF_wnnlo.py 2022
