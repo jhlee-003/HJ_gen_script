@@ -13,7 +13,7 @@ import ROOT
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import plot_ggF_BDT_var_wnnlo_removed as reference
-import plot_ggF_BDT_var_gridpack_wnnlo_removed as plotter
+import plot_HJ_BDT_var_gridpack as plotter
 from check_pico_plotter import event, write_file, expect_error
 from check_wnnlo_removed_plotter import add_nnlo
 
@@ -66,7 +66,7 @@ def main():
                 add_nnlo(invalid, [divisor])
                 expect_error(ValueError, "invalid w_nnlo", plotter.book_histograms,
                              ROOT, [str(invalid)], sample)
-        with patch.object(sys, "argv", ["plot_ggF_BDT_var_gridpack_wnnlo_removed.py", "2022"]), \
+        with patch.object(sys, "argv", ["plot_HJ_BDT_var_gridpack.py", "2022"]), \
              patch.object(plotter, "list_pico_files", side_effect=[([str(previous)], "previous"),
                                                                    ([str(new)], "new")]) as discover, \
              patch.object(plotter, "validate_files", wraps=plotter.validate_files) as validate, \
@@ -83,18 +83,18 @@ def main():
                 top = canvas.GetPad(index).GetPrimitive("hj_top_" + str(index))
                 legends = [p for p in top.GetListOfPrimitives() if p.InheritsFrom("TLegend")]
                 labels = [str(entry.GetLabel()) for entry in legends[0].GetListOfPrimitives()]
-                assert labels == [" HJ (previous)", " HJ (private gridpack)"]
+                assert labels == [" HJ (central gridpack)", " HJ (private gridpack)"]
                 ratio = canvas.GetPad(index).GetPrimitive("hj_ratio_" + str(index))
                 titles = [p.GetTitle() for p in ratio.GetListOfPrimitives() if p.InheritsFrom("TLatex")]
                 assert "New / Previous" in titles
             original_close(canvas)
         for page, call in enumerate(draw.call_args_list, 1):
-            assert call.args[4].name == "ggF_BDT_var_gridpack_wnnlo_removed_2022_{}.png".format(page)
+            assert call.args[4].name == "HJ_BDT_var_gridpack_2022_{}.png".format(page)
             panels = call.kwargs["panels"]
             assert panels == reference.PLOT_GROUPS[page - 1]
             assert call.kwargs["y_title_x"] == 0.11
             assert call.kwargs["event_counts"] == {"Previous": (3,) * len(panels), "New": (3,) * len(panels)}
-            output = Path("/tmp/ggF_BDT_gridpack_synthetic_check_{}.png".format(page))
+            output = Path("/tmp/HJ_BDT_gridpack_synthetic_check_{}.png".format(page))
             with patch.object(ROOT.TCanvas, "Close", inspect_canvas):
                 plotter.draw_plots(*call.args[:4], output, **call.kwargs)
             assert output.is_file() and output.stat().st_size > 0

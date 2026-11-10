@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Compare 19 BDT-input shapes in previous HJ and private-gridpack HJ picos.
+"""Compare 19 BDT-input shapes in central-gridpack and private-gridpack HJ picos.
 
-Usage: python3 tools/plotter/plot_ggF_BDT_var_gridpack_wnnlo_removed.py 2022
+Usage: python3 tools/plotter/plot_HJ_BDT_var_gridpack.py 2022
 Read ALL top-level ROOT files in the configured previous/new HJ pico directories.
 Use weight/w_nnlo for BOTH samples; do not apply object or baseline cuts.
 Standalone PyROOT plotting; three PNGs in the reference PDF's order.
@@ -338,7 +338,7 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
             legend.SetTextSize(legend_text_size)
             legend.SetMargin(0.)
         names.SetMargin(0.11)
-        names.AddEntry(central, " HJ (previous)", "l")
+        names.AddEntry(central, " HJ (central gridpack)", "l")
         names.AddEntry(private, " HJ (private gridpack)", "l")
         counts.SetTextAlign(32)
         counts.AddEntry(root.nullptr, "N={:,}".format(event_counts["Previous"][index - 1]), "")
@@ -562,7 +562,7 @@ def main():
         for page, panels in enumerate(PLOT_GROUPS, start=1):
             stop = start + len(panels)
             output = Path(__file__).resolve().parents[2] / "plots" / (
-                "ggF_BDT_var_gridpack_wnnlo_removed_" + args.year + "_" + str(page) + ".png")
+                "HJ_BDT_var_gridpack_" + args.year + "_" + str(page) + ".png")
             draw_plots(ROOT, samples["Previous"][start:stop], samples["New"][start:stop],
                        args.year, output,
                        event_counts={sample: counts[start:stop] for sample, counts in event_counts.items()},
