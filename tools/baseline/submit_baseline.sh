@@ -3,7 +3,7 @@ set -euo pipefail
 trap 'echo "ERROR: baseline preparation/submission failed (exit=$?, line=$LINENO)" >&2' ERR
 
 if [[ "$#" -lt 3 || "$#" -gt 5 ]]; then
-    echo "Usage: $0 YEAR HJ|ggH|both CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]" >&2
+    echo "Usage: $0 YEAR HJ|HJPrvGrid|ggH|both CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]" >&2
     exit 2
 fi
 YEAR="$1"
@@ -20,7 +20,7 @@ for ARG in "$@"; do
     esac
 done
 [[ "$YEAR" == 2022 ]] || { echo "ERROR: only 2022 is configured" >&2; exit 2; }
-[[ "$SAMPLE" == HJ || "$SAMPLE" == ggH || "$SAMPLE" == both ]] || exit 2
+[[ "$SAMPLE" == HJ || "$SAMPLE" == HJPrvGrid || "$SAMPLE" == ggH || "$SAMPLE" == both ]] || exit 2
 [[ "$CAMPAIGN" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || exit 2
 
 HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,6 +38,7 @@ export X509_USER_PROXY
 mkdir -p "$HELPER_DIR/runs/$CAMPAIGN"
 
 SAMPLES=("$SAMPLE")
+# Preserve the original meaning of 'both'; private-gridpack inputs are opt-in.
 [[ "$SAMPLE" != both ]] || SAMPLES=(HJ ggH)
 for SAMPLE in "${SAMPLES[@]}"; do
     case "$SAMPLE" in
@@ -47,6 +48,13 @@ for SAMPLE in "${SAMPLES[@]}"; do
             MAXDEPTH=1
             DATASET=GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powhegMiNNLO-pythia8
             OUTPUT_DIR=/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico
+            ;;
+        HJPrvGrid)
+            INPUT_DIR=/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022-PrvGrid
+            INPUT_HOST=root://eosuser.cern.ch
+            MAXDEPTH=1
+            DATASET=GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powhegMiNNLO-pythia8
+            OUTPUT_DIR=/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022PrvGridpico
             ;;
         ggH)
             INPUT_DIR=/eos/cms/store/mc/Run3Summer22NanoAODv12/GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2
@@ -131,10 +139,11 @@ weights.update({f"LHEScaleSumw{i}": value for i, value in enumerate(scales)})
 (run / "inputs.txt").write_text("\n".join(sources) + "\n")
 
 rows = []
+gridpack_tag = "__PrvGrid" if sample == "HJPrvGrid" else ""
 for url in sources:
     # A short ID is only for unique filenames, not a provenance/version check.
     file_id = hashlib.sha256(url.encode()).hexdigest()[:20]
-    alias = f"{dataset}__Run3Summer22NanoAODv12__130X_mcRun3_2022_realistic_v5__{file_id}.root"
+    alias = f"{dataset}__Run3Summer22NanoAODv12__130X_mcRun3_2022_realistic_v5{gridpack_tag}__{file_id}.root"
     pico = f"pico_baseline_{sample}{year}_{file_id}.root"
     rows.append(f"{url}\t{url.rsplit('/', 1)[1]}\t{alias}\t{pico}")
 (run / "jobs.tsv").write_text("\n".join(rows) + "\n")

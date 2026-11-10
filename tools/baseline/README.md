@@ -20,11 +20,25 @@ Only 2022 is configured. There is no Condor-cluster filtering.
 | Sample | Inputs | Output |
 | --- | --- | --- |
 | HJ | All top-level ROOT files in `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022` (maxdepth 1) | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico` |
+| HJPrvGrid | All top-level ROOT files in `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022-PrvGrid` (maxdepth 1) | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022PrvGridpico` |
 | ggH | All ROOT files at maxdepth 2 under `/eos/cms/store/mc/Run3Summer22NanoAODv12/GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2` | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH2022pico` |
+
+`HJ` is the original HJ production; `HJPrvGrid` is the separate private-gridpack
+production. The physics year is still `2022`. `both` continues to mean only
+`HJ` plus `ggH`; it does not add the private-gridpack sample automatically.
 
 Discovery requires the EOS mounts on lxplus. Condor stages input files over
 XRootD into worker scratch. UUID filenames get a local parser-compatible
 dataset/year alias; the original files on EOS are not renamed.
+
+For `HJPrvGrid`, parser aliases also contain `__PrvGrid`, outputs are named
+`pico_baseline_HJPrvGrid2022_<id>.root`, preparation/log files are under
+`runs/CAMPAIGN/HJPrvGrid/`, and the Condor batch name is
+`baseline_HJPrvGrid_2022`. The physical MiNNLO dataset prefix is unchanged so
+nano2pico uses the same process classification as the original HJ sample.
+Existing HJ and central pico directories are neither read nor modified by a
+private-gridpack submission. Existing plotters still use their original HJ
+and central directories; this addition does not change plotted inputs.
 
 Only the final baseline pico is transferred to EOS. NanoAODs and raw picos
 are temporary scratch files. stdout/stderr return to AFS at job completion,
@@ -49,7 +63,7 @@ Conversion uses `--nent -1`, without `--skim`.
 
 Before submission, files are sorted and `FILE_LIMIT`, if supplied, selects
 the first N inputs. Normalization reads the Runs metadata of exactly those
-selected files, separately for HJ and ggH. It sums the signed `genEventSumw`
+selected files, separately for HJ, HJPrvGrid and ggH. It sums the signed `genEventSumw`
 and the nine `LHEScaleSumw` entries in the same schema as upstream
 `find_normalization.py`. These sums cover all generated events in the selected
 NanoAOD files BEFORE baseline cuts, not only the surviving pico events.
@@ -114,7 +128,7 @@ authentication protocols. If an old setup exported it, run
 
 ## Prepare, dry-run, submit
 
-Syntax: `bash submit_baseline.sh YEAR HJ|ggH|both CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]`.
+Syntax: `bash submit_baseline.sh YEAR HJ|HJPrvGrid|ggH|both CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]`.
 Without a flag, it only prepares. Each invocation needs a new campaign name.
 
 ```bash
@@ -137,6 +151,26 @@ condor_submit runs/selected100_2022/HJ/baseline.sub
 ```
 
 This uses the same 100 selected inputs for normalization and conversion.
+
+### Private-gridpack HJ sample
+
+With the usual proxy exported and an empty `HJ2022PrvGridpico` output directory:
+
+```bash
+cd ~/HJ_gen_script/tools/baseline
+
+# Normalize and process only the first 100 private-gridpack NanoAOD files.
+bash submit_baseline.sh 2022 HJPrvGrid prvgrid100_2022 100 --dry-run
+condor_submit runs/prvgrid100_2022/HJPrvGrid/baseline.sub
+```
+
+Omit `100` to select all top-level NanoAOD files in `2022-PrvGrid`, or use `1`
+with a new campaign name for a one-file pilot. Normalization is calculated
+from only the selected private-gridpack inputs, before baseline cuts; original
+HJ and central inputs do not contribute. The converter, baseline expression,
+runtime setup and stored pico weights (including nano2pico's `w_nnlo` behavior)
+are unchanged. This is a new input/output route, not a change to the physics
+selection or weight prescriptions.
 
 A dry-run validates submit syntax, not the converter, EOS I/O or physics.
 Check the two real pilot jobs before proceeding.
