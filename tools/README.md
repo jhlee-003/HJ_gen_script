@@ -1,5 +1,14 @@
 # HJ analysis tools
 
+For six-variable HJ kinematics with central versus private gridpacks,
+using `weight / w_nnlo` for BOTH samples:
+
+    python3 tools/plotter/plot_HJ_kinematics_gridpack.py 2022
+
+Output: `plots/HJ_kinematics_gridpack_2022.png` (3 x 2 panels).
+Uses the same `HJ2022pico` and `HJ2022PrvGridpico` inputs and legends as the
+HJ BDT gridpack comparison, with the existing kinematics ranges and binning.
+
 To compare the central-gridpack HJ sample with the new private-gridpack HJ sample,
 removing `w_nnlo` from BOTH samples' plotting weights:
 

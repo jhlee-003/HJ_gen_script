@@ -1,5 +1,39 @@
 # Baseline-pico ggF BDT-input comparison
 
+## HJ gridpack kinematics (NNLO removed from both)
+
+    python3 tools/plotter/plot_HJ_kinematics_gridpack.py 2022
+
+Creates one `plots/HJ_kinematics_gridpack_2022.png`, comparing `HJ2022pico`
+(red, `HJ (central gridpack)`) and `HJ2022PrvGridpico`
+(blue, `HJ (private gridpack)`). Both use signed `weight / w_nnlo`.
+All top-level baseline pico files are used, with no additional object,
+baseline, or sample-type cuts. Histograms are independently unit-normalized,
+with weighted errors, folded edge bins, unweighted `N=` counts and a 0-2
+`New / Previous` ratio (private gridpack / central gridpack).
+
+Uses the original 3 x 2 kinematics layout, 600 x 700 pixel panels and 0.040
+legend font. Variables, bins and ranges match the existing kinematics script:
+
+| Variable | Bins | Range |
+| --- | --- | --- |
+| pT(gamma) | 50 | 15-100 GeV |
+| pT(ll) | 50 | 0-200 GeV |
+| pT(llgamma) | 50 | 0-200 GeV |
+| m(ll) | 35 | 80-100 GeV |
+| m(llgamma) | 50 | 100-150 GeV |
+| NPV (`npv`) | 70 | 0-70 |
+
+Black dashed mass references remain at 91.2 and 125 GeV. Invalid candidate
+indices/undefined variables affect only their own panels. Missing `w_nnlo`,
+zero/non-finite divisors and non-finite resulting weights stop the run;
+negative weights are retained. Only kinematics branches plus `w_nnlo` are
+required, not the BDT schema. Keep `plot_HJ_BDT_var_gridpack.py` alongside it
+for the shared input configuration and renderer. Existing plotters and pico
+files are unchanged.
+
+Test: `python3 tools/plotter/tests/check_hj_kinematics_gridpack_plotter.py`.
+
 ## Central-gridpack HJ versus private-gridpack HJ (NNLO removed from both)
 
     python3 tools/plotter/plot_HJ_BDT_var_gridpack.py 2022
