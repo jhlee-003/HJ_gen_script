@@ -4,7 +4,7 @@ set -euo pipefail
 if [ $# -ne 3 ]; then
   echo "[Usage] $0 JOB_NUMBER NUMBER_OF_EVENTS ENV_FILE" >&2
   echo "  JOB_NUMBER starts from 0; output file numbering starts from 1." >&2
-  echo "  ENV_FILE sets Fragment_filename, AOD_NAME, MINIAOD_NAME, NANOAOD_NAME, and BASE_TAG." >&2
+  echo "  ENV_FILE selects the matching mass, producer, gridpack, fragment, and output names." >&2
   echo "  NTHREADS can be set in the environment and defaults to 2." >&2
   exit 2
 fi
@@ -23,11 +23,30 @@ if [ ! -f "$3" ]; then
 fi
 
 source "$3"
-: "${Fragment_filename:?}" "${AOD_NAME:?}" "${MINIAOD_NAME:?}" "${NANOAOD_NAME:?}" "${BASE_TAG:?}"
+: "${HIGGS_MASS:?}" "${PRODUCER_SCRIPT:?}" "${GRIDPACK_FILENAME:?}" "${Fragment_filename:?}" "${AOD_NAME:?}" "${MINIAOD_NAME:?}" "${NANOAOD_NAME:?}" "${BASE_TAG:?}"
+if [[ "$HIGGS_MASS" != "125" || "$PRODUCER_SCRIPT" != "ProduceHJ_M-125_TuneCP5_2022.sh" \
+    || "$Fragment_filename" != "HJ_M-125_TuneCP5_2022_fragment.py" \
+    || "$GRIDPACK_FILENAME" != "HJ_el8_amd64_gcc11_CMSSW_13_2_5_HJ_MiNNLO_M125_Private.tgz" \
+    || "$BASE_TAG" != *"_M-125_"* ]]; then
+  echo "ERROR: this M125 producer requires the matching M125 environment, fragment, and gridpack" >&2
+  exit 3
+fi
 NTHREADS=${NTHREADS:-2}
 [[ "$NTHREADS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: NTHREADS must be a positive integer" >&2; exit 2; }
 
+# Both schedulers transfer the archive to the job sandbox root. Resolve it
+# before CMSSW and concurrent LHE generation change working directories.
+[[ "$GRIDPACK_FILENAME" =~ ^[A-Za-z0-9._-]+[.]tgz$ ]] || { echo "ERROR: GRIDPACK_FILENAME must be a .tgz basename" >&2; exit 3; }
+if [[ ! -f "$GRIDPACK_FILENAME" || ! -s "$GRIDPACK_FILENAME" || ! -r "$GRIDPACK_FILENAME" ]]; then
+  echo "ERROR: missing, empty, or unreadable gridpack: $GRIDPACK_FILENAME" >&2
+  exit 3
+fi
+export GRIDPACK_PATH="$(pwd -P)/$GRIDPACK_FILENAME"
+
 echo "Set below variables with $3"
+echo "HIGGS_MASS = $HIGGS_MASS"
+echo "GRIDPACK_PATH = $GRIDPACK_PATH"
+sha256sum -- "$GRIDPACK_PATH"
 echo "Fragment_filename = $Fragment_filename"
 echo "AOD_NAME = $AOD_NAME"
 echo "MINIAOD_NAME = $MINIAOD_NAME"

@@ -6,11 +6,10 @@ from WMCore.Configuration import Configuration
 config = Configuration()
 
 # Submit on KNU from an initialized CMSSW/CRAB environment:
-# crab submit -c config/HJ_M-125_TuneCP5_2022_crabConfig.py
+# crab submit -c config/HJ_M-130_TuneCP5_2022_crabConfig.py
 # CRAB supplies the worker proxy; do not ship a separate voms_proxy.txt.
 project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-env_filename = "HJ_M-125_TuneCP5_2022_FullSim.env"
-script_filename = "ProduceHJ_M-125_TuneCP5_2022.sh"
+env_filename = "HJ_M-130_TuneCP5_2022_FullSim.env"
 
 # Read the shared naming file without executing shell code.
 names = {}
@@ -23,12 +22,13 @@ with open(os.path.join(project_dir, "config", env_filename)) as env_file:
         names[key.strip()] = string.Template(value.strip().strip('"')).substitute(names)
 
 base = names["BASE_TAG"]
+script_filename = names["PRODUCER_SCRIPT"]
 work_area = os.path.join(project_dir, "crab_projects")
 
-# Preserve the existing production size; tune events_per_job after a pilot.
+# Pilot settings; increase the production size only after a successful test.
 # The complete LHE-to-NanoAOD chain must fit maxJobRuntimeMin.
-events_per_job = 10000
-number_of_jobs = 10000
+events_per_job = 10
+number_of_jobs = 1
 num_cores = 2
 
 # Use numbered tasks for unique request names.
@@ -71,7 +71,7 @@ config.Data.splitting = "EventBased"
 config.Data.unitsPerJob = events_per_job
 config.Data.totalUnits = events_per_job * number_of_jobs
 config.Data.outputPrimaryDataset = base.split("__", 1)[0]
-config.Data.outputDatasetTag = "Run3Summer22_NanoAODv12_privateProduction_PrvGrid_{}".format(task_number)
+config.Data.outputDatasetTag = "Run3Summer22_M130_NanoAODv12_privateProduction_PrvGrid_{}".format(task_number)
 config.Data.publication = False
 # Use CRAB's default /store/user/<username>/ output base at the storage site.
 

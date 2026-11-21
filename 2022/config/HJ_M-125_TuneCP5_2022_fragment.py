@@ -1,14 +1,22 @@
+import os
+
 import FWCore.ParameterSet.Config as cms
+
+
+# Set by the producer in the worker sandbox, not a developer-machine path.
+# An absolute path also works in ExternalLHEProducer's concurrent thread dirs.
+_gridpack_path = os.environ.get("GRIDPACK_PATH", "")
+if not os.path.isabs(_gridpack_path):
+    raise RuntimeError("GRIDPACK_PATH must be absolute; run the production script to set it.")
+if os.path.basename(_gridpack_path) != "HJ_el8_amd64_gcc11_CMSSW_13_2_5_HJ_MiNNLO_M125_Private.tgz":
+    raise RuntimeError("The M125 fragment requires the matching M125 private gridpack.")
+if not os.path.isfile(_gridpack_path) or not os.access(_gridpack_path, os.R_OK):
+    raise RuntimeError("Custom gridpack is missing or unreadable: " + _gridpack_path)
 
 
 externalLHEProducer = cms.EDProducer(
     "ExternalLHEProducer",
-    args=cms.vstring(
-        "/cvmfs/cms-griddata.cern.ch/phys_generator/gridpacks_tarball/"
-        "pp/13p6TeV/powheg/HJ/"
-        "HJ_el8_amd64_gcc11_CMSSW_13_2_5_"
-        "HJ_13p6TeV-nnpdf31-powheg-MiNNLO31-svn3900-j200-reducedrwl.tgz"
-    ),
+    args=cms.vstring(_gridpack_path),
     nEvents=cms.untracked.uint32(5000),
     numberOfParameters=cms.uint32(1),
     outputFile=cms.string("cmsgrid_final.lhe"),

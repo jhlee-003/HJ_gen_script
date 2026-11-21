@@ -4,7 +4,7 @@ set -euo pipefail
 if [ $# -ne 3 ]; then
   echo "[Usage] $0 JOB_NUMBER NUMBER_OF_EVENTS ENV_FILE" >&2
   echo "  JOB_NUMBER starts from 0; output file numbering starts from 1." >&2
-  echo "  ENV_FILE sets GRIDPACK_FILENAME, Fragment_filename, AOD_NAME, MINIAOD_NAME, NANOAOD_NAME, and BASE_TAG." >&2
+  echo "  ENV_FILE selects the matching mass, producer, gridpack, fragment, and output names." >&2
   echo "  NTHREADS can be set in the environment and defaults to 2." >&2
   exit 2
 fi
@@ -23,7 +23,14 @@ if [ ! -f "$3" ]; then
 fi
 
 source "$3"
-: "${GRIDPACK_FILENAME:?}" "${Fragment_filename:?}" "${AOD_NAME:?}" "${MINIAOD_NAME:?}" "${NANOAOD_NAME:?}" "${BASE_TAG:?}"
+: "${HIGGS_MASS:?}" "${PRODUCER_SCRIPT:?}" "${GRIDPACK_FILENAME:?}" "${Fragment_filename:?}" "${AOD_NAME:?}" "${MINIAOD_NAME:?}" "${NANOAOD_NAME:?}" "${BASE_TAG:?}"
+if [[ "$HIGGS_MASS" != "130" || "$PRODUCER_SCRIPT" != "ProduceHJ_M-130_TuneCP5_2022.sh" \
+    || "$Fragment_filename" != "HJ_M-130_TuneCP5_2022_fragment.py" \
+    || "$GRIDPACK_FILENAME" != "HJ_el8_amd64_gcc11_CMSSW_13_2_5_HJ_MiNNLO_M130_Private.tgz" \
+    || "$BASE_TAG" != *"_M-130_"* ]]; then
+  echo "ERROR: this M130 producer requires the matching M130 environment, fragment, and gridpack" >&2
+  exit 3
+fi
 NTHREADS=${NTHREADS:-2}
 [[ "$NTHREADS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: NTHREADS must be a positive integer" >&2; exit 2; }
 
@@ -37,6 +44,7 @@ fi
 export GRIDPACK_PATH="$(pwd -P)/$GRIDPACK_FILENAME"
 
 echo "Set below variables with $3"
+echo "HIGGS_MASS = $HIGGS_MASS"
 echo "GRIDPACK_PATH = $GRIDPACK_PATH"
 sha256sum -- "$GRIDPACK_PATH"
 echo "Fragment_filename = $Fragment_filename"
@@ -74,12 +82,12 @@ echo "--------------------------------LHE,GEN,SIM-------------------------------
 echo "Setting up CMSSW"
 export SCRAM_ARCH=el8_amd64_gcc10
 [[ \$- == *u* ]] && U_WAS_ON=1 || U_WAS_ON=0; set +u; source /cvmfs/cms.cern.ch/cmsset_default.sh; ((U_WAS_ON)) && set -u
-if [ -r CMSSW_12_4_11_patch3/src ] ; then
-  echo release CMSSW_12_4_11_patch3 already exists
+if [ -r CMSSW_12_4_14_patch2/src ] ; then
+  echo release CMSSW_12_4_14_patch2 already exists
 else
-  scram p CMSSW CMSSW_12_4_11_patch3
+  scram p CMSSW CMSSW_12_4_14_patch2
 fi
-cd CMSSW_12_4_11_patch3/src
+cd CMSSW_12_4_14_patch2/src
 eval \`scram runtime -sh\`
 
 # Setup custom fragment for CMSSW

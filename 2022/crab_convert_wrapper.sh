@@ -29,7 +29,8 @@ done
 [[ "$THREADS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: invalid threads=$THREADS" >&2; exit 2; }
 
 source "./$NAMES"
-: "${NANOAOD_NAME:?NANOAOD_NAME is missing from the naming file}"
+: "${PRODUCER_SCRIPT:?PRODUCER_SCRIPT is missing from the naming file}" "${NANOAOD_NAME:?NANOAOD_NAME is missing from the naming file}"
+[[ "$SCRIPT" == "$PRODUCER_SCRIPT" ]] || { echo "ERROR: script argument does not match the selected mass configuration" >&2; exit 2; }
 
 # Keep a valid report if setup fails before the first production cmsRun.
 cmsRun -j FrameworkJobReport.xml PSet.py
