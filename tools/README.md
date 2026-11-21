@@ -1,58 +1,83 @@
 # HJ analysis tools
 
-For six-variable HJ kinematics with central versus private gridpacks,
-using `weight / w_nnlo` for BOTH samples:
+- [Baseline workflow](baseline/README.md): convert NanoAOD to baseline-selected picos.
+- Pico plotting: the three standalone scripts in `tools/plotter` compare BDT inputs, kinematics and NNLO/NLO ratios.
 
-    python3 tools/plotter/plot_HJ_kinematics_gridpack.py 2022
+## BDT-input comparison
 
-Output: `plots/HJ_kinematics_gridpack_2022.png` (3 x 2 panels).
-Uses the same `HJ2022pico` and `HJ2022PrvGridpico` inputs and legends as the
-HJ BDT gridpack comparison, with the existing kinematics ranges and binning.
+With CMSSW/PyROOT active, run the single consolidated plotter:
 
-To compare the central-gridpack HJ sample with the new private-gridpack HJ sample,
-removing `w_nnlo` from BOTH samples' plotting weights:
+```bash
+python3 tools/plotter/plot_ggF_BDT_var.py \
+  --sample1-name "HJ (central gridpack)" \
+  --sample1-location /eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico \
+  --sample1-type HJ \
+  --sample2-name "HJ (private gridpack)" \
+  --sample2-location /eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022PrvGridpico \
+  --sample2-type HJ \
+  --output-prefix HJ_gridpack_2022 \
+  --max-depth 1
+```
 
-    python3 tools/plotter/plot_HJ_BDT_var_gridpack.py 2022
+All six sample arguments are required. Each `ggH` sample uses `weight`; each
+`HJ` sample uses `weight / w_nnlo`, regardless of its position. Sample 1 is red,
+sample 2 blue; the ratio is sample 2 / sample 1. The same 19 variables, ranges,
+binning and three PNG layouts (8 + 8 + 3) are retained. No new selections.
 
-Outputs: `plots/HJ_BDT_var_gridpack_2022_1.png`, `_2.png`, `_3.png`.
-Inputs are `HJ2022pico` and `HJ2022PrvGridpico` under the configured EOS pico
-directory. The ratio is new/previous; the existing 19-variable BDT format is retained.
+The two optional arguments are `--output-prefix` (default derived from sample
+names) and `--max-depth` (default 1; use 2 to include one subdirectory level).
+The example outputs `plots/HJ_gridpack_2022_{1,2,3}.png`. Existing PNGs are
+protected from overwrite. Each histogram is normalized independently to unit
+summed plotting weight; negative weights are retained and overflow is folded
+into the last visible bin. Run the scripts with `--help` for their arguments.
 
-To compare the `w_nnlo` correction itself using unit event weights:
+The old separate BDT variants and their year-only CLI are retired.
 
-    python3 tools/plotter/plot_ggF_wnnlo.py 2022
+## Kinematics comparison
 
-Output: `plots/ggF_wnnlo_2022.png`, a unit-area central/private overlay and ratio.
-The common range covers both samples; no additional baseline/object cuts.
+Use the same sample arguments with the standalone kinematics plotter:
 
-- [Baseline workflow](baseline/README.md): convert NanoAOD to pico and save baseline-selected events.
-- [Pico plotter](plotter/README.md): compare 19 weighted ggF BDT-input shapes between HJ and central ggF picos.
+```bash
+python3 tools/plotter/plot_ggF_kinematics.py \
+  --sample1-name "HJ (central gridpack)" \
+  --sample1-location /eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico \
+  --sample1-type HJ \
+  --sample2-name "HJ (private gridpack)" \
+  --sample2-location /eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022PrvGridpico \
+  --sample2-type HJ \
+  --output-prefix HJ_kinematics_2022 \
+  --max-depth 1
+```
 
-With CMSSW/PyROOT active, run from the repository root:
+One output: `plots/HJ_kinematics_2022.png`. The existing six variables, binning,
+ranges, 3 x 2 layout and 91.2/125 GeV mass reference lines are retained.
+Each `ggH` sample uses `weight`; each `HJ` sample uses `weight / w_nnlo`.
+Sample names become legends; the ratio is sample 2 / sample 1. Defaults are
+depth 1 and a filename prefix derived from both names. Existing output PNGs
+are protected from overwrite. The two old kinematics variants and year-only
+CLI are retired. The new script does not depend on any other plotter.
 
-    python3 tools/plotter/plot_ggF_BDT_var.py 2022
+## NNLO/NLO ratio comparison
 
-Outputs: `plots/ggF_BDT_var_2022_1.png`, `_2.png`, and `_3.png` (8 + 8 + 3 panels).
-The plotter is standalone; the retired NanoAOD plotting scripts are no longer required.
+```bash
+python3 tools/plotter/plot_ggF_NNLO_to_NLO_ratio.py \
+  --sample1-name "Central gridpack" \
+  --sample1-nnlo-location /eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico \
+  --sample1-nlo-location /eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH2022pico \
+  --sample2-name "Private gridpack" \
+  --sample2-nnlo-location /eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022PrvGridpico \
+  --sample2-nlo-location /eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH2022pico
+```
 
-For a six-variable kinematics comparison (photon, dilepton and llgamma pT;
-dilepton and llgamma mass; primary-vertex count), run:
+Sample 1's name/NNLO(HJ)/NLO(ggH) locations are required. The three `--sample2-*`
+arguments and three `--sample3-*` arguments are optional all-or-none groups.
+One PNG overlays up to three named ratios against the embedded Run 3 lookup,
+with ratio/lookup below. It uses generator-Higgs pT and the existing ratio
+prescription: BOTH HJ and ggH use `weight / w_nnlo`, separately normalized.
+This is distinct from BDT/kinematics weighting. The script is standalone and
+needs neither of the deleted Higgs-pT/w_nnlo diagnostics.
 
-    python3 tools/plotter/plot_ggF_kinematics.py 2022
-
-Output: `plots/ggF_kinematics_2022.png`, one 3 x 2 image using the older, taller
-panel proportions. Both scripts use the same baseline pico directories.
-
-To remove the stored NNLO factor only from HJ's plotting weight:
-
-    python3 tools/plotter/plot_ggF_kinematics_wnnlo_removed.py 2022
-
-Output: `plots/ggF_kinematics_wnnlo_removed_2022.png`. HJ uses `weight/w_nnlo`;
-Central still uses `weight`. The original plotters are unchanged.
-
-For the same HJ-only weight change in all 19 BDT variables:
-
-    python3 tools/plotter/plot_ggF_BDT_var_wnnlo_removed.py 2022
-
-Outputs: `plots/ggF_BDT_var_wnnlo_removed_2022_1.png`, `_2.png`, and `_3.png`.
-The original BDT format, axes, normalization and overflow handling are retained.
+Output: `plots/ggF_NNLO_to_NLO_ratio_<comparison-names>.png`.
+The embedded Run 3 lookup covers 16 generator-Higgs-pT intervals from 0 to
+500 GeV. Events without a saved Higgs or with pT >= 500 GeV are reported and
+omitted. Use `--help` for the full argument list.

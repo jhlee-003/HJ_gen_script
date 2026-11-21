@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Compare the 19 ggF BDT-input shapes in baseline-selected HJ/central picos.
+"""Compare 19 BDT-input shapes between two user-specified baseline pico samples.
 
-Usage: python3 tools/plotter/plot_ggF_BDT_var.py 2022
-Read ALL top-level ROOT files in the configured HJ/ggH pico directories.
-Use tree/weight, not Events/genWeight; do not apply object or baseline cuts.
-Standalone PyROOT plotting; three PNGs in the reference PDF's order.
+Required: --sample1-name, --sample1-location, --sample1-type {ggH,HJ},
+          --sample2-name, --sample2-location, --sample2-type {ggH,HJ}.
+Optional: --output-prefix NAME, --max-depth N (default: 1).
+ggH uses weight; HJ uses weight/w_nnlo, independently for each sample.
+No extra selections. Three unit-area PNGs; ratio = sample 2 / sample 1.
 """
 
 import argparse
 import math
+import re
 from pathlib import Path
 from pathlib import PurePosixPath
 import shutil
@@ -40,6 +42,8 @@ PANELS = (
 PLOT_GROUPS = (PANELS[:8], PANELS[8:16], PANELS[16:])
 
 
+# Year routes retained for the separate diagnostic plotters that import them.
+# The BDT CLI itself always uses the two explicitly supplied sample locations.
 SAMPLE_DIRECTORIES = {
     "2022": {
         "private": "/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico",
@@ -67,14 +71,28 @@ namespace hjpicoplot {
 using ROOT::VecOps::RVec;
 double missing() { return std::numeric_limits<double>::quiet_NaN(); }
 struct Values {
-    double pt_over_mass = missing(), photon_eta = missing();
-    double dr_min = missing(), dr_max = missing(), n_jets = missing();
-    double leading_jet_pt = missing(), m_llgamma = missing();
-    double cos_Theta = missing(), cos_theta = missing(), pt_llgamma = missing();
-    double photon_idmva = missing(), photon_rel_energy_err = missing(), phi = missing();
-    double lepton1_eta = missing(), lepton2_eta = missing(), photon_mht_dphi = missing();
-    double photon_jet_dr = missing(), leading_jet_eta = missing(), leading_jet_mass = missing();
-    double llgamma_jet_dphi = missing(), system_balance = missing(), photon_zeppenfeld = missing();
+    double pt_over_mass = missing();
+    double photon_eta = missing();
+    double dr_min = missing();
+    double dr_max = missing();
+    double n_jets = missing();
+    double leading_jet_pt = missing();
+    double m_llgamma = missing();
+    double cos_Theta = missing();
+    double cos_theta = missing();
+    double pt_llgamma = missing();
+    double photon_idmva = missing();
+    double photon_rel_energy_err = missing();
+    double phi = missing();
+    double lepton1_eta = missing();
+    double lepton2_eta = missing();
+    double photon_mht_dphi = missing();
+    double photon_jet_dr = missing();
+    double leading_jet_eta = missing();
+    double leading_jet_mass = missing();
+    double llgamma_jet_dphi = missing();
+    double system_balance = missing();
+    double photon_zeppenfeld = missing();
 };
 template <typename T> bool has(const RVec<T>& values, int index) {
     return index >= 0 && static_cast<std::size_t>(index) < values.size();
@@ -250,7 +268,9 @@ def draw_y_title(root, pad, text, name, x=0.065):
 
 def draw_plots(root, central_histograms, private_histograms, label, output, event_counts,
                panels=None, columns=None, panel_size=(900, 600), reference_lines=None,
-               legend_text_size=0.060, y_title_x=0.065):
+               legend_text_size=0.060, y_title_x=0.065,
+               sample_names=("[Central] ggH_qme", "[Priavate] HJ (MiNNLO)"),
+               ratio_title="Private / Central"):
     """Reference-style overlays and ratio pads, without global title/cut notes."""
     if panels is None:
         panels = PANELS
@@ -346,8 +366,8 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
             legend.SetTextSize(legend_text_size)
             legend.SetMargin(0.)
         names.SetMargin(0.11)
-        names.AddEntry(central, " [Central] ggH_qme", "l")
-        names.AddEntry(private, " [Priavate] HJ (MiNNLO)", "l")
+        names.AddEntry(central, " " + sample_names[0], "l")
+        names.AddEntry(private, " " + sample_names[1], "l")
         counts.SetTextAlign(32)
         counts.AddEntry(root.nullptr, "N={:,}".format(event_counts["Central"][index - 1]), "")
         counts.AddEntry(root.nullptr, "N={:,}".format(event_counts["Private"][index - 1]), "")
@@ -393,7 +413,7 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         line.SetLineWidth(2)
         line.Draw()
         ratio.Draw("P SAME")
-        keep.append(draw_y_title(root, bottom, "Private / Central",
+        keep.append(draw_y_title(root, bottom, ratio_title,
                                  "hj_y_title_ratio_" + str(index), x=y_title_x))
         keep.extend((axis_hist, line, ratio))
         bottom.RedrawAxis()
@@ -428,23 +448,67 @@ def eos_location(directory):
     return endpoint, eos_path, mounted
 
 
-def list_pico_files(directory):
-    """Include every top-level ROOT file, but never recurse into subdirectories."""
-    endpoint, eos_path, mounted = eos_location(directory)
+def list_pico_files(directory, max_depth=1):
+    """Discover .root files at bounded depth (top-level files have depth 1).
+
+    Local directories are read locally. EOS directories are read through
+    XRootD, using a mounted directory for discovery when it is available.
+    Never traverse symlinks or unbounded remote trees.
+    """
+    if not isinstance(max_depth, int) or max_depth < 1:
+        raise ValueError("max_depth must be a positive integer.")
+    is_eos = directory.startswith(("root://", "/eos/"))
+    if is_eos:
+        endpoint, base, mounted = eos_location(directory)
+    else:
+        mounted = Path(directory).expanduser().resolve()
+        if not mounted.is_dir():
+            raise ValueError("Input location is not a directory: " + directory)
+        endpoint, base = None, str(mounted)
+    paths = set()
     if mounted is not None and mounted.is_dir():
-        paths = [str(path) for path in mounted.iterdir()
-                 if path.is_file() and path.suffix == ".root"]
+        pending = [(mounted, 1)]
+        while pending:
+            folder, depth = pending.pop()
+            for path in folder.iterdir():
+                if path.is_symlink():
+                    continue
+                if path.is_file() and path.suffix == ".root":
+                    paths.add(str(path))
+                elif depth < max_depth and path.is_dir():
+                    pending.append((path, depth + 1))
     else:
         if not shutil.which("xrdfs"):
-            raise RuntimeError("EOS is not mounted and xrdfs is unavailable. Run in a CMS/XRootD environment.")
-        result = subprocess.run(["xrdfs", endpoint, "ls", eos_path],
-                                check=True, text=True, capture_output=True)
-        paths = [line if line.startswith("/") else eos_path + "/" + line
-                 for line in map(str.strip, result.stdout.splitlines()) if line.endswith(".root")]
-    paths = sorted(set(paths))
+            raise RuntimeError("EOS is not mounted and xrdfs is unavailable. Activate CMS/XRootD.")
+        pending, visited = [(base, 1)], set()
+        while pending:
+            folder, depth = pending.pop()
+            if folder in visited:
+                continue
+            visited.add(folder)
+            result = subprocess.run(["xrdfs", endpoint, "ls", "-l", folder],
+                                    check=True, text=True, capture_output=True)
+            for line in filter(None, map(str.strip, result.stdout.splitlines())):
+                # xrdfs ls -l: permissions, date, time, size, full path.
+                fields = line.split(None, 4)
+                if len(fields) != 5 or fields[0][0] not in ("d", "-", "l"):
+                    raise ValueError("Cannot parse xrdfs listing: " + line)
+                kind, path = fields[0][0], fields[4].strip()
+                if not path.startswith("/"):
+                    path = folder + "/" + path
+                candidate = PurePosixPath(path)
+                if ".." in candidate.parts or str(candidate.parent) != folder:
+                    raise ValueError("Unexpected path in xrdfs listing: " + path)
+                if kind == "-" and candidate.suffix == ".root":
+                    paths.add(str(candidate))
+                elif kind == "d" and depth < max_depth:
+                    pending.append((str(candidate), depth + 1))
     if not paths:
-        raise ValueError("No top-level .root files found in " + eos_path)
-    return [endpoint + "//" + path.lstrip("/") for path in paths], PurePosixPath(eos_path).name
+        raise ValueError("No .root files found within max-depth {} of {}".format(max_depth, base))
+    files = sorted(paths)
+    if endpoint:
+        files = [endpoint + "//" + path.lstrip("/") for path in files]
+    return files, PurePosixPath(base).name
 
 
 def configured_year(value):
@@ -458,11 +522,53 @@ def configured_year(value):
 def parse_arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("year", type=configured_year, metavar="YEAR")
+    for index in (1, 2):
+        parser.add_argument("--sample{}-name".format(index), required=True, type=sample_label,
+                            help="Sample {} legend label (quote spaces).".format(index))
+        parser.add_argument("--sample{}-location".format(index), required=True,
+                            help="Local/EOS pico directory, or root:// EOS directory URL.")
+        parser.add_argument("--sample{}-type".format(index), required=True, choices=("ggH", "HJ"),
+                            help="ggH: weight; HJ: weight/w_nnlo.")
+    parser.add_argument("--output-prefix", type=output_prefix,
+                        help="PNG filename prefix inside plots/; default uses both sample names.")
+    parser.add_argument("--max-depth", type=positive_depth, default=1,
+                        help="Input search depth for both samples: 1=direct files, 2=one subdirectory level.")
     return parser, parser.parse_args(argv)
 
 
-def validate_files(root, files):
+def sample_label(value):
+    if not value.strip():
+        raise argparse.ArgumentTypeError("Sample names must not be empty.")
+    return value.strip()
+
+
+def positive_depth(value):
+    try:
+        result = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("max-depth must be a positive integer.")
+    if result < 1:
+        raise argparse.ArgumentTypeError("max-depth must be at least 1.")
+    return result
+
+
+def output_prefix(value):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value):
+        raise argparse.ArgumentTypeError("output-prefix must be a filename prefix using letters, "
+                                         "digits, dots, hyphens or underscores; no directory paths.")
+    return value
+
+
+def output_paths(args):
+    def slug(name):
+        return re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_") or "sample"
+    prefix = args.output_prefix or "ggF_BDT_var_{}_vs_{}".format(
+        slug(args.sample1_name), slug(args.sample2_name))
+    directory = Path(__file__).resolve().parents[2] / "plots"
+    return [directory / (prefix + "_" + str(page) + ".png") for page in (1, 2, 3)]
+
+
+def validate_files(root, files, sample_type="ggH"):
     """Validate every file, including zero-entry baseline picos; never skip files."""
     entries = 0
     for index, filename in enumerate(files, 1):
@@ -475,9 +581,18 @@ def validate_files(root, files):
             tree = source.Get("tree")
             if not tree or not tree.InheritsFrom("TTree"):
                 raise ValueError("Missing pico tree 'tree': " + filename)
-            missing = [name for name in REQUIRED_BRANCHES if not tree.GetBranch(name)]
+            if sample_type not in ("ggH", "HJ"):
+                raise ValueError("Sample type must be ggH or HJ.")
+            required = REQUIRED_BRANCHES + (("w_nnlo",) if sample_type == "HJ" else ())
+            missing = [name for name in required if not tree.GetBranch(name)]
             if missing:
                 raise ValueError("Missing pico branches in {}: {}".format(filename, ", ".join(missing)))
+            scalar_names = ("weight", "w_nnlo") if sample_type == "HJ" else ("weight",)
+            for name in scalar_names:
+                leaf = tree.GetLeaf(name)
+                if (not leaf or leaf.GetLeafCount() or leaf.GetLenStatic() != 1
+                        or leaf.GetTypeName() not in ("Float_t", "Double_t")):
+                    raise ValueError("Expected floating-point scalar {} in {}".format(name, filename))
             entries += int(tree.GetEntries())
         finally:
             source.Close()
@@ -488,7 +603,9 @@ def validate_files(root, files):
     return entries
 
 
-def book_histograms(root, files, sample_name):
+def book_histograms(root, files, sample_name, sample_type="ggH"):
+    if sample_type not in ("ggH", "HJ"):
+        raise ValueError("Sample type must be ggH or HJ.")
     if not root.gInterpreter.Declare(CPP_HELPERS):
         raise RuntimeError("ROOT could not compile the pico variable helpers.")
     root.TH1.SetDefaultSumw2(True)
@@ -497,10 +614,20 @@ def book_histograms(root, files, sample_name):
         inputs.push_back(filename)
     frame = root.RDataFrame("tree", inputs)
     total = frame.Count()
-    frame = frame.Define("hj_pico_weight", "static_cast<double>(weight)")
-    finite_weight = frame.Filter("std::isfinite(hj_pico_weight)", "Finite stored pico weight")
+    weight_expression = "static_cast<double>(weight)"
+    if sample_type == "HJ":
+        weight_expression = (
+            "std::isfinite(static_cast<double>(w_nnlo)) && w_nnlo != 0. "
+            "? static_cast<double>(weight) / static_cast<double>(w_nnlo) "
+            ": std::numeric_limits<double>::quiet_NaN()")
+    frame = frame.Define("hj_pico_weight", weight_expression)
+    frame = frame.Define("hj_pico_weight2", "hj_pico_weight * hj_pico_weight")
+    finite_weight = frame.Filter("std::isfinite(hj_pico_weight) && std::isfinite(hj_pico_weight2)",
+                                 "Finite plotting weight and squared weight")
     usable = finite_weight.Count()
     sumw = finite_weight.Sum("hj_pico_weight")
+    sumw2 = finite_weight.Sum("hj_pico_weight2")
+    negative = finite_weight.Filter("hj_pico_weight < 0.").Count()
     expression = (
         "hjpicoplot::build(llphoton_pt, llphoton_m, llphoton_iph, llphoton_ill, "
         "photon_eta, photon_phi, ll_i1, ll_i2, ll_lepid, el_eta, el_phi, mu_eta, mu_phi, "
@@ -520,8 +647,11 @@ def book_histograms(root, files, sample_name):
             (sample_name + "_pico_" + column, "", bins, low, high), scalar, "hj_pico_weight"))
     # Book all actions before execution: one event loop per sample.
     total_events = int(total.GetValue())
+    if total_events == 0:
+        raise ValueError(sample_name + ": no events.")
     if int(usable.GetValue()) != total_events:
-        raise ValueError("{} contains non-finite stored weights; refusing to silently drop events.".format(sample_name))
+        raise ValueError("{} contains non-finite stored weights, invalid HJ w_nnlo, or overflowing "
+                         "plotting weights; refusing to silently drop events.".format(sample_name))
     histograms = []
     for action in actions:
         hist = action.GetValue().Clone()
@@ -529,6 +659,7 @@ def book_histograms(root, files, sample_name):
         histograms.append(hist)
     return histograms, {
         "total": total_events, "sumw": float(sumw.GetValue()),
+        "sumw2": float(sumw2.GetValue()), "negative_weights": int(negative.GetValue()),
         "counts": tuple(int(count.GetValue()) for count in counts),
         "event_loops": int(frame.GetNRuns()),
     }
@@ -544,30 +675,43 @@ def main():
     ROOT.gROOT.SetBatch(True)
     ROOT.EnableImplicitMT(2)
     try:
+        outputs = output_paths(args)
+        for path in outputs:
+            if path.exists():
+                raise ValueError("Output already exists: {}. Use another --output-prefix or "
+                                 "remove the old output explicitly.".format(path))
         samples, event_counts = {}, {}
-        for sample, key in (("Central", "central"), ("Private", "private")):
-            directory = SAMPLE_DIRECTORIES[args.year][key]
-            files, _ = list_pico_files(directory)
-            print("{}: ALL {} pico ROOT files in {}".format(sample, len(files), directory), flush=True)
-            entries = validate_files(ROOT, files)
-            histograms, summary = book_histograms(ROOT, files, sample.lower())
+        # Internal renderer slots retain their historical names; names, input
+        # paths and ggH/HJ weighting are controlled solely by the CLI, not slots.
+        for index, slot in ((1, "Central"), (2, "Private")):
+            name = getattr(args, "sample{}_name".format(index))
+            directory = getattr(args, "sample{}_location".format(index))
+            kind = getattr(args, "sample{}_type".format(index))
+            print("Sample {}: {} [{}]; discovering {} (max-depth {})".format(
+                index, name, kind, directory, args.max_depth), flush=True)
+            files, _ = list_pico_files(directory, max_depth=args.max_depth)
+            print("  ALL {:,} ROOT files; plotting weight = {}".format(
+                len(files), "weight/w_nnlo" if kind == "HJ" else "weight"), flush=True)
+            entries = validate_files(ROOT, files, sample_type=kind)
+            histograms, summary = book_histograms(ROOT, files, "sample" + str(index), sample_type=kind)
             if summary["total"] != entries:
-                raise RuntimeError("Input event count changed while reading " + sample)
-            print("{}: {:,} baseline events; sum(weight)={:.8g}".format(
-                sample, entries, summary["sumw"]), flush=True)
+                raise RuntimeError("Input event count changed while reading " + name)
+            print("{}: {:,} baseline events; sum(plotting_weight)={:.8g}; sumw2={:.8g}; "
+                  "negative-weight events={:,}".format(
+                      name, entries, summary["sumw"], summary["sumw2"], summary["negative_weights"]), flush=True)
             for panel, count in zip(PANELS, summary["counts"]):
                 print("  {}: N={:,}, undefined/no-object={:,}".format(panel[0], count, entries - count))
-            samples[sample] = histograms
-            event_counts[sample] = summary["counts"]
+            samples[slot] = histograms
+            event_counts[slot] = summary["counts"]
         start = 0
-        for page, panels in enumerate(PLOT_GROUPS, start=1):
+        for output, panels in zip(outputs, PLOT_GROUPS):
             stop = start + len(panels)
-            output = Path(__file__).resolve().parents[2] / "plots" / (
-                "ggF_BDT_var_" + args.year + "_" + str(page) + ".png")
             draw_plots(ROOT, samples["Central"][start:stop], samples["Private"][start:stop],
-                       args.year, output,
+                       "", output,
                        event_counts={sample: counts[start:stop] for sample, counts in event_counts.items()},
-                       panels=panels, y_title_x=0.11)
+                       panels=panels, y_title_x=0.11,
+                       sample_names=(args.sample1_name, args.sample2_name),
+                       ratio_title="Sample 2 / 1")
             print("Saved " + str(output))
             start = stop
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
