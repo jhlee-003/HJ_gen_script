@@ -15,30 +15,38 @@ hash guards, provenance records, timestamp labels or extra Python worker.
 
 ## Inputs and outputs
 
-Only 2022 is configured. There is no Condor-cluster filtering.
+Only 2022 is configured. There is no Condor-cluster filtering. All HJ inputs
+below are private-gridpack samples; the mass points are processed separately.
 
 | Sample | Inputs | Output |
 | --- | --- | --- |
-| HJ | All top-level ROOT files in `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022` (maxdepth 1) | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico` |
-| HJPrvGrid | All top-level ROOT files in `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022-PrvGrid` (maxdepth 1) | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022PrvGridpico` |
-| ggH | All ROOT files at maxdepth 2 under `/eos/cms/store/mc/Run3Summer22NanoAODv12/GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2` | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH2022pico` |
+| HJ_M120 | All top-level ROOT files in `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022/M120` (maxdepth 1) | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ_2022_M-120_pico` |
+| HJ_M125 | All top-level ROOT files in `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022/M125` (maxdepth 1) | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ_2022_M-125_pico` |
+| HJ_M130 | All top-level ROOT files in `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022/M130` (maxdepth 1) | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ_2022_M-130_pico` |
+| ggH | All ROOT files at maxdepth 2 under `/eos/cms/store/mc/Run3Summer22NanoAODv12/GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2` | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH_2022_M-125_pico` |
 
-`HJ` is the original HJ production; `HJPrvGrid` is the separate private-gridpack
-production. The physics year is still `2022`. `both` continues to mean only
-`HJ` plus `ggH`; it does not add the private-gridpack sample automatically.
+`HJ` now selects all three HJ masses (`HJ_M120`, `HJ_M125`, `HJ_M130`), not
+top-level files in `2022/`. Use a mass-specific choice to process just one.
+The legacy `HJPrvGrid` choice is an alias for `HJ_M125`, using the new paths
+above, not the retired `2022-PrvGrid` directory. `both` selects `HJ_M125` and
+the central M125 `ggH` sample only. Central M120/M130 processing and the old
+central-gridpack sample in `2022-test` are not selected by these commands.
 
 Discovery requires the EOS mounts on lxplus. Condor stages input files over
 XRootD into worker scratch. UUID filenames get a local parser-compatible
 dataset/year alias; the original files on EOS are not renamed.
 
-For `HJPrvGrid`, parser aliases also contain `__PrvGrid`, outputs are named
-`pico_baseline_HJPrvGrid2022_<id>.root`, preparation/log files are under
-`runs/CAMPAIGN/HJPrvGrid/`, and the Condor batch name is
-`baseline_HJPrvGrid_2022`. The physical MiNNLO dataset prefix is unchanged so
-nano2pico uses the same process classification as the original HJ sample.
-Existing HJ and central pico directories are neither read nor modified by a
-private-gridpack submission. Existing plotters still use their original HJ
-and central directories; this addition does not change plotted inputs.
+For each HJ mass, the parser alias uses the matching `GluGluHtoZG_Zto2L_M-MASS`
+MiNNLO dataset prefix and contains `__PrvGrid`. Files with an explicit different
+`_M-MASS_` token in their basename are rejected before normalization. Do not
+point this workflow at a mixed-mass directory or increase discovery depth to
+combine the three mass folders.
+
+For example, M120 outputs are named `pico_baseline_HJ_2022_M-120_<id>.root`,
+preparation/log files are under `runs/CAMPAIGN/HJ_M120/`, and the Condor batch
+name is `baseline_HJ_M120_2022`. M125 and M130 follow the same convention.
+Normalization JSONs, job lists, output paths and batch labels are distinct for
+every mass. Plotter configurations are not changed by this baseline revision.
 
 Only the final baseline pico is transferred to EOS. NanoAODs and raw picos
 are temporary scratch files. stdout/stderr return to AFS at job completion,
@@ -63,7 +71,7 @@ Conversion uses `--nent -1`, without `--skim`.
 
 Before submission, files are sorted and `FILE_LIMIT`, if supplied, selects
 the first N inputs. Normalization reads the Runs metadata of exactly those
-selected files, separately for HJ, HJPrvGrid and ggH. It sums the signed `genEventSumw`
+selected files, separately for every HJ mass and for ggH. It sums the signed `genEventSumw`
 and the nine `LHEScaleSumw` entries in the same schema as upstream
 `find_normalization.py`. These sums cover all generated events in the selected
 NanoAOD files BEFORE baseline cuts, not only the surviving pico events.
@@ -128,60 +136,74 @@ authentication protocols. If an old setup exported it, run
 
 ## Prepare, dry-run, submit
 
-Syntax: `bash submit_baseline.sh YEAR HJ|HJPrvGrid|ggH|both CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]`.
+Syntax: `bash submit_baseline.sh YEAR SAMPLE CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]`.
+`SAMPLE` is `HJ`, `HJ_M120`, `HJ_M125`, `HJ_M130`, `HJPrvGrid`, `ggH`, or `both`.
 Without a flag, it only prepares. Each invocation needs a new campaign name.
 
 ```bash
 cd ~/HJ_gen_script/tools/baseline
 
-# One-file pilot for each sample; normalize only that selected input file.
-bash submit_baseline.sh 2022 both pilot_2022 1 --dry-run
+# One-file pilot per HJ mass; normalize only that mass's selected input file.
+bash submit_baseline.sh 2022 HJ pilot_2022 1 --dry-run
 
 # Submit those already-prepared jobs, without repeating normalization.
-condor_submit runs/pilot_2022/HJ/baseline.sub
-condor_submit runs/pilot_2022/ggH/baseline.sub
+condor_submit runs/pilot_2022/HJ_M120/baseline.sub
+condor_submit runs/pilot_2022/HJ_M125/baseline.sub
+condor_submit runs/pilot_2022/HJ_M130/baseline.sub
 condor_q
 ```
 
-For an HJ sample consisting of 100 files, with an empty HJ pico output directory:
+For an M120 HJ sample consisting of 100 files, with an empty M120 pico output directory:
 
 ```bash
-bash submit_baseline.sh 2022 HJ selected100_2022 100 --dry-run
-condor_submit runs/selected100_2022/HJ/baseline.sub
+bash submit_baseline.sh 2022 HJ_M120 selected100_m120_2022 100 --dry-run
+condor_submit runs/selected100_m120_2022/HJ_M120/baseline.sub
 ```
 
 This uses the same 100 selected inputs for normalization and conversion.
 
-### Private-gridpack HJ sample
+### All three HJ masses
 
-With the usual proxy exported and an empty `HJ2022PrvGridpico` output directory:
+With the usual proxy exported and all three HJ pico output directories empty:
 
 ```bash
 cd ~/HJ_gen_script/tools/baseline
 
-# Normalize and process only the first 100 private-gridpack NanoAOD files.
-bash submit_baseline.sh 2022 HJPrvGrid prvgrid100_2022 100 --dry-run
-condor_submit runs/prvgrid100_2022/HJPrvGrid/baseline.sub
+# No file limit: prepare every top-level input within each mass directory.
+bash submit_baseline.sh 2022 HJ production_2022 --dry-run
+condor_submit runs/production_2022/HJ_M120/baseline.sub
+condor_submit runs/production_2022/HJ_M125/baseline.sub
+condor_submit runs/production_2022/HJ_M130/baseline.sub
 ```
 
-Omit `100` to select all top-level NanoAOD files in `2022-PrvGrid`, or use `1`
-with a new campaign name for a one-file pilot. Normalization is calculated
-from only the selected private-gridpack inputs, before baseline cuts; original
-HJ and central inputs do not contribute. The converter, baseline expression,
-runtime setup and stored pico weights (including nano2pico's `w_nnlo` behavior)
-are unchanged. This is a new input/output route, not a change to the physics
-selection or weight prescriptions.
+`FILE_LIMIT` applies independently to each selected mass. Thus `HJ ... 100`
+prepares up to 100 inputs per mass (up to 300 jobs), not 100 inputs pooled
+across masses. Each mass receives its own common normalization from its
+selected NanoAODs BEFORE baseline cuts. Preparation finishes for every
+requested mass/sample before any jobs are submitted.
+
+If M125 is already processed, keep those picos and select `HJ_M120` and
+`HJ_M130` with separate new campaign names instead of requesting `HJ`. The
+workflow does not delete, overwrite or skip existing ROOT outputs.
+
+The converter, baseline expression, runtime setup and stored pico weights
+(including nano2pico's `w_nnlo` behavior) are unchanged. Correct mass aliases
+are passed to nano2pico for sample recognition and cross-section lookup;
+the scripts do not override its mass-dependent cross sections or corrections.
+Check each mass's real pilot and weights using the installed nano2pico build
+before a physics-yield analysis.
 
 A dry-run validates submit syntax, not the converter, EOS I/O or physics.
-Check the two real pilot jobs before proceeding.
+Check the real pilot for each requested mass/sample before proceeding.
 
 If CERN rejects `stream_output` / `stream_error` in an old prepared submit
 file, remove those lines from both that file and the template. Reuse the
 existing normalization JSON and job list; do not repeat preparation.
 
 ```bash
-# Full samples: one conversion+baseline job for every discovered file.
-bash submit_baseline.sh 2022 both production_2022 --submit
+# Alternative: prepare and immediately submit all three HJ masses.
+# Use this instead of, not after, the preparation/submission example above.
+bash submit_baseline.sh 2022 HJ production_direct_2022 --submit
 ```
 
 Preparation refuses an output directory that already contains ROOT files.

@@ -3,7 +3,8 @@ set -euo pipefail
 trap 'echo "ERROR: baseline preparation/submission failed (exit=$?, line=$LINENO)" >&2' ERR
 
 if [[ "$#" -lt 3 || "$#" -gt 5 ]]; then
-    echo "Usage: $0 YEAR HJ|HJPrvGrid|ggH|both CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]" >&2
+    echo "Usage: $0 YEAR HJ|HJ_M120|HJ_M125|HJ_M130|HJPrvGrid|ggH|both CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]" >&2
+    echo "  HJ selects all three masses; HJPrvGrid selects HJ_M125; both selects HJ_M125 and ggH." >&2
     exit 2
 fi
 YEAR="$1"
@@ -20,7 +21,13 @@ for ARG in "$@"; do
     esac
 done
 [[ "$YEAR" == 2022 ]] || { echo "ERROR: only 2022 is configured" >&2; exit 2; }
-[[ "$SAMPLE" == HJ || "$SAMPLE" == HJPrvGrid || "$SAMPLE" == ggH || "$SAMPLE" == both ]] || exit 2
+case "$SAMPLE" in
+    HJ) SAMPLES=(HJ_M120 HJ_M125 HJ_M130) ;;
+    HJPrvGrid) SAMPLES=(HJ_M125) ;;
+    both) SAMPLES=(HJ_M125 ggH) ;;
+    HJ_M120|HJ_M125|HJ_M130|ggH) SAMPLES=("$SAMPLE") ;;
+    *) echo "ERROR: unsupported sample: $SAMPLE" >&2; exit 2 ;;
+esac
 [[ "$CAMPAIGN" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || exit 2
 
 HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,31 +44,22 @@ export X509_USER_PROXY
     { echo "ERROR: choose a new campaign name; existing campaign is not overwritten" >&2; exit 2; }
 mkdir -p "$HELPER_DIR/runs/$CAMPAIGN"
 
-SAMPLES=("$SAMPLE")
-# Preserve the original meaning of 'both'; private-gridpack inputs are opt-in.
-[[ "$SAMPLE" != both ]] || SAMPLES=(HJ ggH)
 for SAMPLE in "${SAMPLES[@]}"; do
     case "$SAMPLE" in
-        HJ)
-            INPUT_DIR=/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022
+        HJ_M120|HJ_M125|HJ_M130)
+            HIGGS_MASS="${SAMPLE#HJ_M}"
+            INPUT_DIR="/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022/M${HIGGS_MASS}"
             INPUT_HOST=root://eosuser.cern.ch
             MAXDEPTH=1
-            DATASET=GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powhegMiNNLO-pythia8
-            OUTPUT_DIR=/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022pico
-            ;;
-        HJPrvGrid)
-            INPUT_DIR=/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022-PrvGrid
-            INPUT_HOST=root://eosuser.cern.ch
-            MAXDEPTH=1
-            DATASET=GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powhegMiNNLO-pythia8
-            OUTPUT_DIR=/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022PrvGridpico
+            DATASET="GluGluHtoZG_Zto2L_M-${HIGGS_MASS}_TuneCP5_13p6TeV_powhegMiNNLO-pythia8"
+            OUTPUT_DIR="/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ_2022_M-${HIGGS_MASS}_pico"
             ;;
         ggH)
             INPUT_DIR=/eos/cms/store/mc/Run3Summer22NanoAODv12/GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2
             INPUT_HOST=root://eoscms.cern.ch
             MAXDEPTH=2
             DATASET=GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8
-            OUTPUT_DIR=/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH2022pico
+            OUTPUT_DIR=/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH_2022_M-125_pico
             ;;
     esac
     RUN_DIR="$HELPER_DIR/runs/$CAMPAIGN/$SAMPLE"
@@ -76,6 +74,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import sys
 import ROOT
 
@@ -103,6 +102,13 @@ if any(any(char.isspace() for char in url) for url in sources):
 print(f"{sample}: found {len(files)} files (maxdepth {depth})", flush=True)
 sources = sources[:int(limit)] if int(limit) else sources
 print(f"{sample}: selected {len(sources)} files for conversion and normalization", flush=True)
+if sample.startswith("HJ_M"):
+    mass = sample[len("HJ_M"):]
+    for url in sources:
+        # Refuse explicit wrong-mass names instead of silently relabeling them.
+        named_mass = re.search(r"_M-(\d+)_", url.rsplit("/", 1)[1])
+        if named_mass and named_mass.group(1) != mass:
+            raise SystemExit(f"Input mass does not match {sample}: {url}")
 
 sumw, scales, events = 0.0, [0.0] * 9, 0
 for index, url in enumerate(sources, 1):
@@ -139,12 +145,13 @@ weights.update({f"LHEScaleSumw{i}": value for i, value in enumerate(scales)})
 (run / "inputs.txt").write_text("\n".join(sources) + "\n")
 
 rows = []
-gridpack_tag = "__PrvGrid" if sample == "HJPrvGrid" else ""
+gridpack_tag = "__PrvGrid" if sample.startswith("HJ_M") else ""
+pico_label = f"HJ_{year}_M-{sample[len('HJ_M'):]}" if sample.startswith("HJ_M") else f"{sample}{year}"
 for url in sources:
     # A short ID is only for unique filenames, not a provenance/version check.
     file_id = hashlib.sha256(url.encode()).hexdigest()[:20]
     alias = f"{dataset}__Run3Summer22NanoAODv12__130X_mcRun3_2022_realistic_v5{gridpack_tag}__{file_id}.root"
-    pico = f"pico_baseline_{sample}{year}_{file_id}.root"
+    pico = f"pico_baseline_{pico_label}_{file_id}.root"
     rows.append(f"{url}\t{url.rsplit('/', 1)[1]}\t{alias}\t{pico}")
 (run / "jobs.tsv").write_text("\n".join(rows) + "\n")
 header = f"YEAR = {year}\nSAMPLE = {sample}\nHELPER_DIR = {helper}\nRUN_DIR = {run}\nOUTPUT_DESTINATION = root://eosuser.cern.ch/{output_dir}/\n"
@@ -155,7 +162,7 @@ print(f"{sample}: {events:,} events, signed sumw={sumw:.12g}; prepared {len(rows
 PREPARE
 done
 
-# Prepare both samples successfully before submitting either.
+# Prepare every requested mass/sample successfully before submitting any jobs.
 for SAMPLE in "${SAMPLES[@]}"; do
     RUN_DIR="$HELPER_DIR/runs/$CAMPAIGN/$SAMPLE"
     case "$MODE" in

@@ -51,31 +51,49 @@ class BaselineTests(unittest.TestCase):
         self.assertNotIn("stream_error =", text)
         self.assertNotIn("export XrdSecPROTOCOL=gsi", (HELPER / "setup_runtime.sh").read_text())
 
-    def test_sample_routes_keep_gridpacks_separate(self):
+    def test_sample_routes_keep_masses_separate(self):
         script = (HELPER / "submit_baseline.sh").read_text()
         routing = script.split('    case "$SAMPLE" in\n', 1)[1].split('\n    esac', 1)[0]
         command = ('SAMPLE="$1"\ncase "$SAMPLE" in\n' + routing +
                    '\nesac\nprintf "%s\\n" "$INPUT_DIR" "$INPUT_HOST" "$MAXDEPTH" "$DATASET" "$OUTPUT_DIR"')
         base = "/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD"
-        dataset = "GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powhegMiNNLO-pythia8"
         routes = {}
-        for sample in ("HJ", "HJPrvGrid", "ggH"):
+        for sample in ("HJ_M120", "HJ_M125", "HJ_M130", "ggH"):
             result = subprocess.run(["bash", "-eu", "-c", command, "fixture", sample],
                                     capture_output=True, text=True, check=True)
             routes[sample] = result.stdout.splitlines()
-        self.assertEqual(routes["HJ"], [base + "/2022", "root://eosuser.cern.ch", "1",
-                                        dataset, base + "/pico/HJ2022pico"])
-        self.assertEqual(routes["HJPrvGrid"], [base + "/2022-PrvGrid", "root://eosuser.cern.ch", "1",
-                                               dataset, base + "/pico/HJ2022PrvGridpico"])
+        for mass in (120, 125, 130):
+            self.assertEqual(routes[f"HJ_M{mass}"], [base + f"/2022/M{mass}", "root://eosuser.cern.ch", "1",
+                             f"GluGluHtoZG_Zto2L_M-{mass}_TuneCP5_13p6TeV_powhegMiNNLO-pythia8",
+                             base + f"/pico/HJ_2022_M-{mass}_pico"])
         self.assertEqual(routes["ggH"][0], "/eos/cms/store/mc/Run3Summer22NanoAODv12/"
                          "GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/"
                          "NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2")
         self.assertEqual(routes["ggH"][1:3], ["root://eoscms.cern.ch", "2"])
-        self.assertEqual(routes["ggH"][4], base + "/pico/ggH2022pico")
-        self.assertIn('"$SAMPLE" == HJPrvGrid', script)
-        self.assertIn('SAMPLES=(HJ ggH)', script)
+        self.assertEqual(routes["ggH"][4], base + "/pico/ggH_2022_M-125_pico")
+        self.assertEqual(len({route[0] for route in routes.values()}), 4)
+        self.assertEqual(len({route[4] for route in routes.values()}), 4)
         self.assertIn('+JobBatchName = "baseline_$(SAMPLE)_$(YEAR)"',
                       (HELPER / "baseline.sub").read_text())
+
+    def test_sample_expansion_and_legacy_alias(self):
+        script = (HELPER / "submit_baseline.sh").read_text()
+        selection = script.split('case "$SAMPLE" in\n', 1)[1].split('\nesac', 1)[0]
+        command = ('SAMPLE="$1"\ncase "$SAMPLE" in\n' + selection +
+                   '\nesac\nprintf "%s\\n" "${SAMPLES[@]}"')
+        for request, expected in {
+                "HJ": ["HJ_M120", "HJ_M125", "HJ_M130"],
+                "HJPrvGrid": ["HJ_M125"], "both": ["HJ_M125", "ggH"],
+                "HJ_M120": ["HJ_M120"], "HJ_M125": ["HJ_M125"],
+                "HJ_M130": ["HJ_M130"], "ggH": ["ggH"]}.items():
+            with self.subTest(request=request):
+                result = subprocess.run(["bash", "-eu", "-c", command, "fixture", request],
+                                        capture_output=True, text=True, check=True)
+                self.assertEqual(result.stdout.splitlines(), expected)
+        rejected = subprocess.run(["bash", "-eu", "-c", command, "fixture", "HJ_M140"],
+                                  capture_output=True, text=True)
+        self.assertEqual(rejected.returncode, 2)
+        self.assertIn("unsupported sample", rejected.stderr)
 
     def test_json_directory_key_adaptation(self):
         code = embedded((HELPER / "run_baseline.sh").read_text(), "NORM")
@@ -91,17 +109,19 @@ class BaselineTests(unittest.TestCase):
         with patch.object(sys, "argv", argv), self.assertRaises(SystemExit):
             exec(compile(code, "<worker normalization>", "exec"), {})
 
-    def prepare_fixture(self, depth=2, limit=1, existing=False, bad=None, bad_index=0, sample="ggH"):
+    def prepare_fixture(self, depth=2, limit=1, existing=False, bad=None, bad_index=0,
+                        sample="ggH", filenames=None, first_sum=5):
         inputs, output, run, helper = [self.base / name for name in ("nano", "pico", "run", "helper")]
         for path in (inputs, output, run, helper):
             path.mkdir(exist_ok=True)
         (helper / "baseline.sub").write_text((HELPER / "baseline.sub").read_text())
-        files = [inputs / "a.root", inputs / "child/b.root", inputs / "child/deeper/c.root"]
+        filenames = filenames or ["a.root", "child/b.root", "child/deeper/c.root"]
+        files = [inputs / name for name in filenames]
         records = {}
         for index, path in enumerate(files):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.touch()
-            values = [5] if index == 0 else [-2, 10]
+            values = [first_sum] if index == 0 else [-2, 10]
             entries = [SimpleNamespace(genEventSumw=value, LHEScaleSumw=[1.] * 9) for value in values]
             if bad == "scale" and index == bad_index:
                 entries[0].LHEScaleSumw = [1.] * 8
@@ -120,9 +140,10 @@ class BaselineTests(unittest.TestCase):
                                TFile=SimpleNamespace(Open=lambda url, mode: self.opened.append(url) or records[url]))
         if existing:
             (output / "old.root").touch()
-        generator = "powhegMiNNLO-pythia8" if sample in ("HJ", "HJPrvGrid") else "powheg-pythia8"
+        mass = sample[len("HJ_M"):] if sample.startswith("HJ_M") else "125"
+        generator = "powhegMiNNLO-pythia8" if sample.startswith("HJ_M") else "powheg-pythia8"
         argv = ["-", "2022", sample, str(inputs), "root://fixture", str(depth),
-                "GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_" + generator,
+                f"GluGluHtoZG_Zto2L_M-{mass}_TuneCP5_13p6TeV_" + generator,
                 str(output), str(run), str(helper), str(limit)]
         code = embedded((HELPER / "submit_baseline.sh").read_text(), "PREPARE")
         with patch.dict(sys.modules, ROOT=fake), patch.object(sys, "argv", argv), redirect_stdout(io.StringIO()):
@@ -143,28 +164,43 @@ class BaselineTests(unittest.TestCase):
         self.assertIn("Run3Summer22NanoAODv12", rows[0])
         self.assertIn("pico_baseline_ggH2022_", rows[0])
 
-    def test_private_gridpack_preparation_labels_and_normalization(self):
-        run = self.prepare_fixture(depth=1, sample="HJPrvGrid")
-        inputs = (run / "inputs.txt").read_text().splitlines()
-        rows = [line.split("\t") for line in (run / "jobs.tsv").read_text().splitlines()]
-        norm = json.loads((run / "normalization.json").read_text())
-        self.assertEqual(norm["dataset"], "GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powhegMiNNLO-pythia8")
-        self.assertEqual(norm["weights"]["genEventSumw"], 5)
-        self.assertEqual([norm["weights"][f"LHEScaleSumw{i}"] for i in range(9)], [1] * 9)
-        self.assertEqual(self.opened, inputs)
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0][0], inputs[0])
-        self.assertTrue(rows[0][2].startswith(norm["dataset"] + "__Run3Summer22NanoAODv12__"))
-        self.assertIn("__PrvGrid__", rows[0][2])
-        self.assertEqual(rows[0][2].split("__", 1)[0], norm["dataset"])
-        self.assertTrue(rows[0][3].startswith("pico_baseline_HJPrvGrid2022_"))
-        self.assertIn("SAMPLE = HJPrvGrid\n", (run / "baseline.sub").read_text())
+    def test_private_gridpack_mass_labels_and_independent_normalization(self):
+        preparations = []
+        for mass, sumw in ((120, 5), (125, 7), (130, 11)):
+            directory = self.base / str(mass)
+            directory.mkdir()
+            with self.subTest(mass=mass), patch.object(self, "base", directory):
+                run = self.prepare_fixture(depth=1, sample=f"HJ_M{mass}", first_sum=sumw,
+                                           filenames=[f"GluGluHtoZG_Zto2L_M-{mass}_test.root",
+                                                      "child/ignored.root"])
+                inputs = (run / "inputs.txt").read_text().splitlines()
+                rows = [line.split("\t") for line in (run / "jobs.tsv").read_text().splitlines()]
+                norm = json.loads((run / "normalization.json").read_text())
+                self.assertEqual(norm["dataset"], f"GluGluHtoZG_Zto2L_M-{mass}_TuneCP5_13p6TeV_powhegMiNNLO-pythia8")
+                self.assertEqual(norm["weights"]["genEventSumw"], sumw)
+                self.assertEqual([norm["weights"][f"LHEScaleSumw{i}"] for i in range(9)], [1] * 9)
+                self.assertEqual(self.opened, inputs)
+                self.assertEqual(len(rows), 1)
+                self.assertEqual(rows[0][0], inputs[0])
+                self.assertTrue(rows[0][2].startswith(norm["dataset"] + "__Run3Summer22NanoAODv12__"))
+                self.assertIn("__PrvGrid__", rows[0][2])
+                self.assertEqual(rows[0][2].split("__", 1)[0], norm["dataset"])
+                self.assertTrue(rows[0][3].startswith(f"pico_baseline_HJ_2022_M-{mass}_"))
+                self.assertIn(f"SAMPLE = HJ_M{mass}\n", (run / "baseline.sub").read_text())
+                preparations.append((run, sumw))
+        for run, sumw in preparations:
+            self.assertEqual(json.loads((run / "normalization.json").read_text())["weights"]["genEventSumw"], sumw)
 
-    def test_original_hj_preparation_keeps_original_labels(self):
-        run = self.prepare_fixture(depth=1, sample="HJ")
-        row = (run / "jobs.tsv").read_text().splitlines()[0].split("\t")
-        self.assertNotIn("__PrvGrid", row[2])
-        self.assertTrue(row[3].startswith("pico_baseline_HJ2022_"))
+    def test_wrong_mass_input_is_rejected_before_normalization(self):
+        with self.assertRaisesRegex(SystemExit, "Input mass does not match HJ_M120"):
+            self.prepare_fixture(depth=1, sample="HJ_M120", filenames=["GluGluHtoZG_M-130_test.root"])
+        self.assertEqual(self.opened, [])
+
+    def test_unselected_wrong_mass_file_is_not_normalized(self):
+        run = self.prepare_fixture(depth=1, sample="HJ_M120", limit=1,
+                                   filenames=["a_M-120_test.root", "b_M-130_test.root"])
+        self.assertEqual(len(self.opened), 1)
+        self.assertEqual(json.loads((run / "normalization.json").read_text())["weights"]["genEventSumw"], 5)
 
     def test_normalize_all_files_without_limit(self):
         run = self.prepare_fixture(limit=0)
