@@ -3,7 +3,7 @@ set -euo pipefail
 trap 'echo "ERROR: baseline preparation/submission failed (exit=$?, line=$LINENO)" >&2' ERR
 
 if [[ "$#" -lt 3 || "$#" -gt 5 ]]; then
-    echo "Usage: $0 YEAR HJ|HJ_M120|HJ_M125|HJ_M130|HJPrvGrid|ggH|both CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]" >&2
+    echo "Usage: $0 YEAR HJ|HJ_M120|HJ_M125|HJ_M130|HJPrvGrid|ggH_M120|ggH|both CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]" >&2
     echo "  HJ selects all three masses; HJPrvGrid selects HJ_M125; both selects HJ_M125 and ggH." >&2
     exit 2
 fi
@@ -25,7 +25,7 @@ case "$SAMPLE" in
     HJ) SAMPLES=(HJ_M120 HJ_M125 HJ_M130) ;;
     HJPrvGrid) SAMPLES=(HJ_M125) ;;
     both) SAMPLES=(HJ_M125 ggH) ;;
-    HJ_M120|HJ_M125|HJ_M130|ggH) SAMPLES=("$SAMPLE") ;;
+    HJ_M120|HJ_M125|HJ_M130|ggH_M120|ggH) SAMPLES=("$SAMPLE") ;;
     *) echo "ERROR: unsupported sample: $SAMPLE" >&2; exit 2 ;;
 esac
 [[ "$CAMPAIGN" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || exit 2
@@ -53,6 +53,13 @@ for SAMPLE in "${SAMPLES[@]}"; do
             MAXDEPTH=1
             DATASET="GluGluHtoZG_Zto2L_M-${HIGGS_MASS}_TuneCP5_13p6TeV_powhegMiNNLO-pythia8"
             OUTPUT_DIR="/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ_2022_M-${HIGGS_MASS}_pico"
+            ;;
+        ggH_M120)
+            INPUT_DIR=/eos/user/j/junhyuk/ggH_qme_central/2022_M120
+            INPUT_HOST=root://eosuser.cern.ch
+            MAXDEPTH=2
+            DATASET=GluGluHtoZG_Zto2L_M-120_TuneCP5_13p6TeV_powheg-pythia8
+            OUTPUT_DIR=/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH_2022_M-120_pico
             ;;
         ggH)
             INPUT_DIR=/eos/cms/store/mc/Run3Summer22NanoAODv12/GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2
@@ -102,8 +109,8 @@ if any(any(char.isspace() for char in url) for url in sources):
 print(f"{sample}: found {len(files)} files (maxdepth {depth})", flush=True)
 sources = sources[:int(limit)] if int(limit) else sources
 print(f"{sample}: selected {len(sources)} files for conversion and normalization", flush=True)
-if sample.startswith("HJ_M"):
-    mass = sample[len("HJ_M"):]
+if sample.startswith(("HJ_M", "ggH_M")):
+    mass = sample.split("_M", 1)[1]
     for url in sources:
         # Refuse explicit wrong-mass names instead of silently relabeling them.
         named_mass = re.search(r"_M-(\d+)_", url.rsplit("/", 1)[1])
@@ -146,7 +153,8 @@ weights.update({f"LHEScaleSumw{i}": value for i, value in enumerate(scales)})
 
 rows = []
 gridpack_tag = "__PrvGrid" if sample.startswith("HJ_M") else ""
-pico_label = f"HJ_{year}_M-{sample[len('HJ_M'):]}" if sample.startswith("HJ_M") else f"{sample}{year}"
+pico_label = (f"{sample.split('_M', 1)[0]}_{year}_M-{sample.split('_M', 1)[1]}"
+              if sample.startswith(("HJ_M", "ggH_M")) else f"{sample}{year}")
 for url in sources:
     # A short ID is only for unique filenames, not a provenance/version check.
     file_id = hashlib.sha256(url.encode()).hexdigest()[:20]
