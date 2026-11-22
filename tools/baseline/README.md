@@ -24,15 +24,16 @@ below are private-gridpack samples; the mass points are processed separately.
 | HJ_M125 | All top-level ROOT files in `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022/M125` (maxdepth 1) | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ_2022_M-125_pico` |
 | HJ_M130 | All top-level ROOT files in `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/2022/M130` (maxdepth 1) | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ_2022_M-130_pico` |
 | ggH_M120 | All ROOT files at maxdepth 2 under `/eos/user/j/junhyuk/ggH_qme_central/2022_M120` | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH_2022_M-120_pico` |
+| ggH_M130 | All ROOT files at maxdepth 2 under `/eos/user/j/junhyuk/ggH_qme_central/2022_M130` | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH_2022_M-130_pico` |
 | ggH | All ROOT files at maxdepth 2 under `/eos/cms/store/mc/Run3Summer22NanoAODv12/GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2` | `/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH_2022_M-125_pico` |
 
 `HJ` now selects all three HJ masses (`HJ_M120`, `HJ_M125`, `HJ_M130`), not
 top-level files in `2022/`. Use a mass-specific choice to process just one.
 The legacy `HJPrvGrid` choice is an alias for `HJ_M125`, using the new paths
 above, not the retired `2022-PrvGrid` directory. `both` selects `HJ_M125` and
-the central M125 `ggH` sample only. Central M120 is selected explicitly with
-`ggH_M120`; it is not added to `HJ` or `both`. Central M130 processing and the
-old central-gridpack sample in `2022-test` are not selected by these commands.
+the central M125 `ggH` sample only. Central M120 and M130 are selected explicitly
+with `ggH_M120` and `ggH_M130`; neither is added to `HJ` or `both`. The old
+central-gridpack sample in `2022-test` is not selected by these commands.
 
 Discovery requires the EOS mounts on lxplus. Condor stages input files over
 XRootD into worker scratch. UUID filenames get a local parser-compatible
@@ -139,7 +140,7 @@ authentication protocols. If an old setup exported it, run
 ## Prepare, dry-run, submit
 
 Syntax: `bash submit_baseline.sh YEAR SAMPLE CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]`.
-`SAMPLE` is `HJ`, `HJ_M120`, `HJ_M125`, `HJ_M130`, `HJPrvGrid`, `ggH_M120`, `ggH`, or `both`.
+`SAMPLE` is `HJ`, `HJ_M120`, `HJ_M125`, `HJ_M130`, `HJPrvGrid`, `ggH_M120`, `ggH_M130`, `ggH`, or `both`.
 Without a flag, it only prepares. Each invocation needs a new campaign name.
 
 ```bash
@@ -224,6 +225,24 @@ are under `runs/CAMPAIGN/ggH_M120/`, with batch name `baseline_ggH_M120_2022`.
 The baseline cut and nano2pico's stored weights are unchanged; in particular,
 the central sample retains its normal `w_nnlo` factor. The existing HJ mass
 routes and central M125 `ggH` route are not redirected by this addition.
+
+### Central ggH M130
+
+The M130 route uses the matching input directory
+`/eos/user/j/junhyuk/ggH_qme_central/2022_M130` and writes to
+`/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH_2022_M-130_pico`.
+With a new campaign name, a valid proxy and an empty M130 output directory:
+
+```bash
+bash submit_baseline.sh 2022 ggH_M130 ggh_m130_baseline_2022 --dry-run
+condor_submit runs/ggh_m130_baseline_2022/ggH_M130/baseline.sub
+```
+
+It uses the same maxdepth-2 discovery, UUID alias handling, baseline and weight
+prescriptions as central M120, but with M130 POWHEG dataset aliases and its own
+normalization. Outputs are `pico_baseline_ggH_2022_M-130_<id>.root`; manifests and
+logs are under `runs/CAMPAIGN/ggH_M130/`, with batch name
+`baseline_ggH_M130_2022`. No M120 or HJ files participate in this normalization.
 
 If CERN rejects `stream_output` / `stream_error` in an old prepared submit
 file, remove those lines from both that file and the template. Reuse the

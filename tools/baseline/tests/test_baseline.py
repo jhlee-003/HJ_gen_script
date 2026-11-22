@@ -58,7 +58,7 @@ class BaselineTests(unittest.TestCase):
                    '\nesac\nprintf "%s\\n" "$INPUT_DIR" "$INPUT_HOST" "$MAXDEPTH" "$DATASET" "$OUTPUT_DIR"')
         base = "/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD"
         routes = {}
-        for sample in ("HJ_M120", "HJ_M125", "HJ_M130", "ggH_M120", "ggH"):
+        for sample in ("HJ_M120", "HJ_M125", "HJ_M130", "ggH_M120", "ggH_M130", "ggH"):
             result = subprocess.run(["bash", "-eu", "-c", command, "fixture", sample],
                                     capture_output=True, text=True, check=True)
             routes[sample] = result.stdout.splitlines()
@@ -71,12 +71,13 @@ class BaselineTests(unittest.TestCase):
                          "NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2")
         self.assertEqual(routes["ggH"][1:3], ["root://eoscms.cern.ch", "2"])
         self.assertEqual(routes["ggH"][4], base + "/pico/ggH_2022_M-125_pico")
-        self.assertEqual(routes["ggH_M120"], ["/eos/user/j/junhyuk/ggH_qme_central/2022_M120",
-                         "root://eosuser.cern.ch", "2",
-                         "GluGluHtoZG_Zto2L_M-120_TuneCP5_13p6TeV_powheg-pythia8",
-                         base + "/pico/ggH_2022_M-120_pico"])
-        self.assertEqual(len({route[0] for route in routes.values()}), 5)
-        self.assertEqual(len({route[4] for route in routes.values()}), 5)
+        for mass in (120, 130):
+            self.assertEqual(routes[f"ggH_M{mass}"], [f"/eos/user/j/junhyuk/ggH_qme_central/2022_M{mass}",
+                             "root://eosuser.cern.ch", "2",
+                             f"GluGluHtoZG_Zto2L_M-{mass}_TuneCP5_13p6TeV_powheg-pythia8",
+                             base + f"/pico/ggH_2022_M-{mass}_pico"])
+        self.assertEqual(len({route[0] for route in routes.values()}), 6)
+        self.assertEqual(len({route[4] for route in routes.values()}), 6)
         self.assertIn('+JobBatchName = "baseline_$(SAMPLE)_$(YEAR)"',
                       (HELPER / "baseline.sub").read_text())
 
@@ -89,7 +90,8 @@ class BaselineTests(unittest.TestCase):
                 "HJ": ["HJ_M120", "HJ_M125", "HJ_M130"],
                 "HJPrvGrid": ["HJ_M125"], "both": ["HJ_M125", "ggH"],
                 "HJ_M120": ["HJ_M120"], "HJ_M125": ["HJ_M125"],
-                "HJ_M130": ["HJ_M130"], "ggH_M120": ["ggH_M120"], "ggH": ["ggH"]}.items():
+                "HJ_M130": ["HJ_M130"], "ggH_M120": ["ggH_M120"],
+                "ggH_M130": ["ggH_M130"], "ggH": ["ggH"]}.items():
             with self.subTest(request=request):
                 result = subprocess.run(["bash", "-eu", "-c", command, "fixture", request],
                                         capture_output=True, text=True, check=True)
@@ -224,6 +226,30 @@ class BaselineTests(unittest.TestCase):
     def test_central_m120_wrong_mass_is_rejected(self):
         with self.assertRaisesRegex(SystemExit, "Input mass does not match ggH_M120"):
             self.prepare_fixture(sample="ggH_M120", filenames=["GluGluHtoZG_M-125_test.root"])
+        self.assertEqual(self.opened, [])
+
+    def test_central_m130_uuid_aliases_and_selected_normalization(self):
+        run = self.prepare_fixture(sample="ggH_M130", depth=2, limit=1, first_sum=7,
+                                   filenames=["a-uuid.root", "b-uuid.root", "child/deeper/excluded.root"])
+        inputs = (run / "inputs.txt").read_text().splitlines()
+        rows = [line.split("\t") for line in (run / "jobs.tsv").read_text().splitlines()]
+        norm = json.loads((run / "normalization.json").read_text())
+        self.assertEqual(norm["dataset"], "GluGluHtoZG_Zto2L_M-130_TuneCP5_13p6TeV_powheg-pythia8")
+        self.assertEqual(norm["weights"]["genEventSumw"], 7)
+        self.assertEqual([norm["weights"][f"LHEScaleSumw{i}"] for i in range(9)], [1] * 9)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(self.opened, inputs)
+        self.assertEqual(rows[0][0], inputs[0])
+        self.assertTrue(rows[0][2].startswith(norm["dataset"] + "__Run3Summer22NanoAODv12__"))
+        self.assertEqual(rows[0][2].split("__", 1)[0], norm["dataset"])
+        self.assertNotIn("__PrvGrid", rows[0][2])
+        self.assertNotIn("powhegMiNNLO", rows[0][2])
+        self.assertTrue(rows[0][3].startswith("pico_baseline_ggH_2022_M-130_"))
+        self.assertIn("SAMPLE = ggH_M130\n", (run / "baseline.sub").read_text())
+
+    def test_central_m130_wrong_mass_is_rejected(self):
+        with self.assertRaisesRegex(SystemExit, "Input mass does not match ggH_M130"):
+            self.prepare_fixture(sample="ggH_M130", filenames=["GluGluHtoZG_M-120_test.root"])
         self.assertEqual(self.opened, [])
 
     def test_unselected_wrong_mass_file_is_not_normalized(self):

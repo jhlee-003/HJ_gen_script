@@ -3,7 +3,7 @@ set -euo pipefail
 trap 'echo "ERROR: baseline preparation/submission failed (exit=$?, line=$LINENO)" >&2' ERR
 
 if [[ "$#" -lt 3 || "$#" -gt 5 ]]; then
-    echo "Usage: $0 YEAR HJ|HJ_M120|HJ_M125|HJ_M130|HJPrvGrid|ggH_M120|ggH|both CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]" >&2
+    echo "Usage: $0 YEAR HJ|HJ_M120|HJ_M125|HJ_M130|HJPrvGrid|ggH_M120|ggH_M130|ggH|both CAMPAIGN [FILE_LIMIT] [--dry-run|--submit]" >&2
     echo "  HJ selects all three masses; HJPrvGrid selects HJ_M125; both selects HJ_M125 and ggH." >&2
     exit 2
 fi
@@ -25,7 +25,7 @@ case "$SAMPLE" in
     HJ) SAMPLES=(HJ_M120 HJ_M125 HJ_M130) ;;
     HJPrvGrid) SAMPLES=(HJ_M125) ;;
     both) SAMPLES=(HJ_M125 ggH) ;;
-    HJ_M120|HJ_M125|HJ_M130|ggH_M120|ggH) SAMPLES=("$SAMPLE") ;;
+    HJ_M120|HJ_M125|HJ_M130|ggH_M120|ggH_M130|ggH) SAMPLES=("$SAMPLE") ;;
     *) echo "ERROR: unsupported sample: $SAMPLE" >&2; exit 2 ;;
 esac
 [[ "$CAMPAIGN" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || exit 2
@@ -54,12 +54,13 @@ for SAMPLE in "${SAMPLES[@]}"; do
             DATASET="GluGluHtoZG_Zto2L_M-${HIGGS_MASS}_TuneCP5_13p6TeV_powhegMiNNLO-pythia8"
             OUTPUT_DIR="/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ_2022_M-${HIGGS_MASS}_pico"
             ;;
-        ggH_M120)
-            INPUT_DIR=/eos/user/j/junhyuk/ggH_qme_central/2022_M120
+        ggH_M120|ggH_M130)
+            HIGGS_MASS="${SAMPLE#ggH_M}"
+            INPUT_DIR="/eos/user/j/junhyuk/ggH_qme_central/2022_M${HIGGS_MASS}"
             INPUT_HOST=root://eosuser.cern.ch
             MAXDEPTH=2
-            DATASET=GluGluHtoZG_Zto2L_M-120_TuneCP5_13p6TeV_powheg-pythia8
-            OUTPUT_DIR=/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH_2022_M-120_pico
+            DATASET="GluGluHtoZG_Zto2L_M-${HIGGS_MASS}_TuneCP5_13p6TeV_powheg-pythia8"
+            OUTPUT_DIR="/eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH_2022_M-${HIGGS_MASS}_pico"
             ;;
         ggH)
             INPUT_DIR=/eos/cms/store/mc/Run3Summer22NanoAODv12/GluGluHtoZG_Zto2L_M-125_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/130X_mcRun3_2022_realistic_v5-v2
