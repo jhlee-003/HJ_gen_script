@@ -333,7 +333,7 @@ def build_comparison(nlo_sums, nnlo_sums, nlo_sumw2, nnlo_sumw2, weights):
     }
 
 
-def make_graphs(root, rows, tag="comparison"):
+def make_graphs(root, rows, tag="comparison", x_offset=0.):
     observed = root.TGraphErrors()
     observed.SetName(tag + "_nnlo_over_nlo")
     closure = root.TGraphErrors()
@@ -342,15 +342,37 @@ def make_graphs(root, rows, tag="comparison"):
         if row["ratio"] is None:
             continue
         point = observed.GetN()
-        observed.SetPoint(point, float(index), row["ratio"])
+        observed.SetPoint(point, float(index) + x_offset, row["ratio"])
         observed.SetPointError(point, 0., row["error"])
-        closure.SetPoint(point, float(index), row["closure"])
+        closure.SetPoint(point, float(index) + x_offset, row["closure"])
         closure.SetPointError(point, 0., row["closure_error"])
     return observed, closure
 
 
+def make_bars(root, rows, field, color, width, offset, limits):
+    """Bars occupy a sub-interval of each category; undefined ratios stay gaps.
+
+    Clip only the painted rectangle to the frame. Full values and errors stay
+    unchanged in rows/error graphs, including points outside the lower range.
+    """
+    bars = []
+    baseline = min(limits[1], max(limits[0], 0.))
+    for index, row in enumerate(rows, 1):
+        if row["ratio"] is None:
+            continue
+        value = min(limits[1], max(limits[0], row[field]))
+        center = float(index) + offset
+        bar = root.TBox(center - width / 2., min(baseline, value),
+                        center + width / 2., max(baseline, value))
+        bar.SetFillColorAlpha(color, 0.35)
+        bar.SetLineColor(color)
+        bar.SetLineWidth(2)
+        bars.append(bar)
+    return bars
+
+
 def draw_comparison(root, comparisons, output):
-    """Overlay 1-3 independently normalized HJ/ggH ratios and one fixed lookup."""
+    """Grouped bars for 1-3 normalized HJ/ggH ratios, with errors and lookup."""
     if not 1 <= len(comparisons) <= 3:
         raise ValueError("Provide between one and three comparisons.")
     root.gStyle.SetOptStat(0)
@@ -386,16 +408,24 @@ def draw_comparison(root, comparisons, output):
     raw.SetLineWidth(3)
     raw.SetFillStyle(0)
     curves = []
+    bar_width = 0.78 / len(comparisons)
     for index, (comparison, color) in enumerate(zip(comparisons, ("#5B88CF", "#2CA02C", "#9467BD")), 1):
-        observed, closure = make_graphs(root, comparison["rows"], "comparison" + str(index))
-        for graph, size in ((observed, 0.85), (closure, 0.55)):
-            graph.SetLineColor(root.TColor.GetColor(color))
-            graph.SetMarkerColor(root.TColor.GetColor(color))
-            graph.SetMarkerStyle(20 + index - 1)
-            graph.SetMarkerSize(size)
+        color = root.TColor.GetColor(color)
+        offset = -0.39 + (index - 0.5) * bar_width
+        observed, closure = make_graphs(root, comparison["rows"], "comparison" + str(index), offset)
+        for graph in (observed, closure):
+            graph.SetLineColor(color)
+            graph.SetMarkerColor(color)
+            graph.SetMarkerStyle(20)
+            graph.SetMarkerSize(0.)
             graph.SetLineWidth(2)
-        curves.append((observed, closure))
-        keep.extend((observed, closure))
+        legend_bar = root.TBox()
+        legend_bar.SetFillColorAlpha(color, 0.35)
+        legend_bar.SetLineColor(color)
+        legend_bar.SetLineWidth(2)
+        curves.append({"observed": observed, "closure": closure, "color": color,
+                       "offset": offset, "rows": comparison["rows"], "legend": legend_bar})
+        keep.extend((observed, closure, legend_bar))
 
     top.cd()
     rows = [row for comparison in comparisons for row in comparison["rows"]]
@@ -409,13 +439,19 @@ def draw_comparison(root, comparisons, output):
     axes.GetYaxis().SetLabelSize(0.049)
     axes.GetYaxis().SetNdivisions(508)
     axes.Draw("AXIS")
+    for curve in curves:
+        bars = make_bars(root, curve["rows"], "ratio", curve["color"], bar_width,
+                         curve["offset"], (axes.GetMinimum(), axes.GetMaximum()))
+        for bar in bars:
+            bar.Draw("SAME")
+        keep.extend(bars)
     unity = root.TLine(0.5, 1., bins + 0.5, 1.)
     unity.SetLineColor(root.kBlack)
     unity.SetLineStyle(2)
     unity.Draw()
     raw.Draw("HIST SAME")
-    for observed, _ in curves:
-        observed.Draw("P SAME")
+    for curve in curves:
+        curve["observed"].Draw("Z SAME")
     keep.append(draw_y_title(root, top, "NNLO / NLO", "nnlo_to_nlo_y", x=0.11))
     legend = root.TLegend(0.24, 0.88 - 0.055 * (len(comparisons) + 1), 0.92, 0.88)
     legend.SetBorderSize(0)
@@ -423,8 +459,8 @@ def draw_comparison(root, comparisons, output):
     legend.SetTextFont(42)
     legend.SetTextSize(0.040)
     legend.SetMargin(0.09)
-    for comparison, (observed, _) in zip(comparisons, curves):
-        legend.AddEntry(observed, " " + comparison["name"], "pe")
+    for comparison, curve in zip(comparisons, curves):
+        legend.AddEntry(curve["legend"], " " + comparison["name"], "f")
     legend.AddEntry(raw, " w_{NNLO} lookup (Run 3)", "l")
     legend.Draw()
     cms = root.TLatex()
@@ -456,13 +492,19 @@ def draw_comparison(root, comparisons, output):
     ratio_axes.GetYaxis().SetLabelSize(0.108)
     ratio_axes.GetYaxis().SetNdivisions(505)
     ratio_axes.Draw("AXIS")
+    for curve in curves:
+        bars = make_bars(root, curve["rows"], "closure", curve["color"], bar_width,
+                         curve["offset"], (0., 2.))
+        for bar in bars:
+            bar.Draw("SAME")
+        keep.extend(bars)
     line = root.TLine(0.5, 1., bins + 0.5, 1.)
     line.SetLineColor(root.kBlack)
     line.SetLineStyle(2)
     line.SetLineWidth(2)
     line.Draw()
-    for _, closure in curves:
-        closure.Draw("P SAME")
+    for curve in curves:
+        curve["closure"].Draw("Z SAME")
     keep.append(draw_y_title(root, bottom, "Ratio / w_{NNLO}", "nnlo_closure_y", x=0.11))
     bottom.RedrawAxis()
     keep.extend((axes, raw, unity, legend, cms, energy, ratio_axes, line))

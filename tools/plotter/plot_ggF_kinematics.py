@@ -4,7 +4,8 @@
 Required: --sample1-name, --sample1-location, --sample1-type {ggH,HJ},
           --sample2-name, --sample2-location, --sample2-type {ggH,HJ}.
 Optional: --sample3-name, --sample3-location, --sample3-type (all three together),
-          --output-prefix NAME, --max-depth N (default: 1).
+          --output-prefix NAME, --max-depth N (default: 1),
+          --higgs-mass MASS_GEV (reference line only, default: 125).
 ggH uses weight; HJ uses weight/w_nnlo, independently for each sample.
 No extra selections. One unit-area 3x2 PNG; ratios = samples 2 and 3 / sample 1.
 """
@@ -161,6 +162,7 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
     # BDT plots default to the PDF's wider 3:2 panels; other callers can opt
     # into the original taller kinematic panels without changing the styling.
     canvas = root.TCanvas("hj_comparison_canvas", "", panel_size[0] * columns, panel_size[1] * rows)
+    canvas.SetCanvasSize(panel_size[0] * columns, panel_size[1] * rows)
     canvas.Divide(columns, rows, 0.001, 0.001)
     keep = []
     colors = tuple(root.TColor.GetColor(color) for color in ("#D62728", "#5B88CF", "#2CA02C"))
@@ -406,6 +408,9 @@ def parse_arguments(argv=None):
                         help="PNG filename prefix inside plots/; default uses all sample names.")
     parser.add_argument("--max-depth", type=positive_depth, default=1,
                         help="Input search depth for all samples: 1=direct files, 2=one subdirectory level.")
+    parser.add_argument("--higgs-mass", type=positive_mass, default=125., metavar="MASS_GEV",
+                        help="Position of the m(llgamma) reference line in GeV (default: 125). "
+                             "Does not select events or change the 100-150 GeV display range.")
     args = parser.parse_args(argv)
     third = (args.sample3_name, args.sample3_location, args.sample3_type)
     if any(value is not None for value in third) and any(value is None for value in third):
@@ -426,6 +431,16 @@ def positive_depth(value):
         raise argparse.ArgumentTypeError("max-depth must be a positive integer.")
     if result < 1:
         raise argparse.ArgumentTypeError("max-depth must be at least 1.")
+    return result
+
+
+def positive_mass(value):
+    try:
+        result = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("higgs-mass must be a finite positive number in GeV.")
+    if not math.isfinite(result) or result <= 0.:
+        raise argparse.ArgumentTypeError("higgs-mass must be a finite positive number in GeV.")
     return result
 
 
@@ -515,6 +530,7 @@ def main():
     ROOT.gROOT.SetBatch(True)
     ROOT.EnableImplicitMT(2)
     try:
+        print("Higgs-mass reference: {:g} GeV".format(args.higgs_mass), flush=True)
         outputs = output_paths(args)
         for path in outputs:
             if path.exists():
@@ -547,8 +563,8 @@ def main():
             event_counts[slot] = summary["counts"]
         output = outputs[0]
         draw_plots(ROOT, samples["Central"], samples["Private"], "", output,
-                   event_counts=event_counts, panels=PANELS, columns=3, panel_size=(600, 700),
-                   reference_lines={"m_ll": 91.2, "m_llgamma": 125.}, legend_text_size=0.040,
+                   event_counts=event_counts, panels=PANELS, columns=3, panel_size=(900, 700),
+                   reference_lines={"m_ll": 91.2, "m_llgamma": args.higgs_mass}, legend_text_size=0.040,
                    sample_names=sample_names,
                    ratio_title="Samples / 1" if "Third" in samples else "Sample 2 / 1",
                    third_histograms=samples.get("Third"))

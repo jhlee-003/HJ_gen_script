@@ -69,11 +69,18 @@ python3 tools/plotter/plot_ggF_kinematics.py \
   --sample2-location /eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/HJ2022PrvGridpico \
   --sample2-type HJ \
   --output-prefix HJ_kinematics_2022 \
-  --max-depth 1
+  --max-depth 1 \
+  --higgs-mass 125
 ```
 
 One output: `plots/HJ_kinematics_2022.png`. The existing six variables, binning,
-ranges, 3 x 2 layout and 91.2/125 GeV mass reference lines are retained.
+ranges and 3 x 2 layout are retained. Panels are now 900 x 700 pixels
+(previously 600 x 700), giving a wider 2700 x 1400 pixel output image.
+The black dashed m(ll) line stays at 91.2 GeV. Set `--higgs-mass 120`, `125`,
+or `130` to move the m(llgamma) line to that mass; its default is 125 GeV.
+This argument changes only the reference line, not event selection, weights,
+binning or the 100-150 GeV m(llgamma) range. In a mass-point loop, use
+`--higgs-mass "$MASS"` with the matching input directories and output prefix.
 Each `ggH` sample uses `weight`; each `HJ` sample uses `weight / w_nnlo`.
 Sample names become legends. The same optional `--sample3-name`,
 `--sample3-location`, `--sample3-type` group is supported; all three must be
@@ -98,8 +105,11 @@ python3 tools/plotter/plot_ggF_NNLO_to_NLO_ratio.py \
 
 Sample 1's name/NNLO(HJ)/NLO(ggH) locations are required. The three `--sample2-*`
 arguments and three `--sample3-*` arguments are optional all-or-none groups.
-One PNG overlays up to three named ratios against the embedded Run 3 lookup,
-with ratio/lookup below. It uses generator-Higgs pT and the existing ratio
+One PNG shows up to three named ratios as side-by-side colored bars against
+the embedded Run 3 lookup curve, with matching ratio/lookup bars below.
+Statistical error bars remain, but dot markers are not drawn. Grouping only
+changes visual positions inside each pT category, not the values, intervals
+or errors. Undefined ratios remain gaps. It uses generator-Higgs pT and the existing ratio
 prescription: BOTH HJ and ggH use `weight / w_nnlo`, separately normalized.
 This is distinct from BDT/kinematics weighting. The script is standalone and
 needs neither of the deleted Higgs-pT/w_nnlo diagnostics.
