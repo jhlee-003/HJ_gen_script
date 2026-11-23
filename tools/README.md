@@ -3,6 +3,13 @@
 - [Baseline workflow](baseline/README.md): convert NanoAOD to baseline-selected picos.
 - Pico plotting: the three standalone scripts in `tools/plotter` compare BDT inputs, kinematics and NNLO/NLO ratios.
 
+All three plotters process discovered files directly, without a separate
+per-file validation scan. Event totals come from the normal ROOT event loop.
+ROOT still opens the input files while processing; file/schema problems are
+handled during reading rather than prechecked file by file. In-loop safeguards
+for invalid weights, zero/non-finite correction divisors, undefined variables and
+normalization are retained. No weights, selections or plotting formats change.
+
 ## BDT-input comparison
 
 With CMSSW/PyROOT active, run the single consolidated plotter:

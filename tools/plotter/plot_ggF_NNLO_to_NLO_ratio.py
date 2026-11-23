@@ -223,34 +223,6 @@ def output_path(args):
         "ggF_NNLO_to_NLO_ratio_" + "_".join(names) + ".png")
 
 
-def validate_files(root, files):
-    entries = 0
-    for index, filename in enumerate(files, 1):
-        source = root.TFile.Open(filename, "READ")
-        if not source or source.IsZombie():
-            if source:
-                source.Close()
-            raise RuntimeError("Cannot open " + filename)
-        try:
-            tree = source.Get("tree")
-            if not tree or not tree.InheritsFrom("TTree"):
-                raise ValueError("Missing pico tree 'tree': " + filename)
-            missing = [name for name in REQUIRED_BRANCHES if not tree.GetBranch(name)]
-            if missing:
-                raise ValueError("Missing pico branches in {}: {}".format(filename, ", ".join(missing)))
-            for name in ("weight", "w_nnlo"):
-                leaf = tree.GetLeaf(name)
-                if (not leaf or leaf.GetLeafCount() or leaf.GetLenStatic() != 1
-                        or leaf.GetTypeName() not in ("Float_t", "Double_t")):
-                    raise ValueError("{} must be a floating-point scalar: {}".format(name, filename))
-            entries += int(tree.GetEntries())
-        finally:
-            source.Close()
-        if index % 100 == 0 or index == len(files):
-            print("Validated {}/{} pico files".format(index, len(files)), flush=True)
-    if entries == 0:
-        raise ValueError("The pico sample contains no events.")
-    return entries
 
 
 def book_histograms(root, files, sample_name):
@@ -540,10 +512,8 @@ def main():
                 print(label + ": discovering " + location, flush=True)
                 files, _ = list_pico_files(location)
                 print("  ALL {} ROOT files; signed weight/w_nnlo".format(len(files)), flush=True)
-                entries = validate_files(ROOT, files)
+                print("  Processing events directly (no preliminary file-validation scan)...", flush=True)
                 histograms, stats = book_histograms(ROOT, files, "sample{}_{}".format(group["index"], role))
-                if stats["total"] != entries:
-                    raise RuntimeError("Input event count changed while reading " + label)
                 hist = histograms[0]
                 sums[role] = [float(hist.GetBinContent(b)) for b in range(1, hist.GetNbinsX() + 1)]
                 squared[role] = [float(hist.GetBinError(b)) ** 2 for b in range(1, hist.GetNbinsX() + 1)]

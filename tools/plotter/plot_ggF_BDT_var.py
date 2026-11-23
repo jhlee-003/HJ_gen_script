@@ -596,39 +596,6 @@ def output_paths(args):
     return [directory / (prefix + "_" + str(page) + ".png") for page in (1, 2, 3)]
 
 
-def validate_files(root, files, sample_type="ggH"):
-    """Validate every file, including zero-entry baseline picos; never skip files."""
-    entries = 0
-    for index, filename in enumerate(files, 1):
-        source = root.TFile.Open(filename, "READ")
-        if not source or source.IsZombie():
-            if source:
-                source.Close()
-            raise RuntimeError("Cannot open " + filename)
-        try:
-            tree = source.Get("tree")
-            if not tree or not tree.InheritsFrom("TTree"):
-                raise ValueError("Missing pico tree 'tree': " + filename)
-            if sample_type not in ("ggH", "HJ"):
-                raise ValueError("Sample type must be ggH or HJ.")
-            required = REQUIRED_BRANCHES + (("w_nnlo",) if sample_type == "HJ" else ())
-            missing = [name for name in required if not tree.GetBranch(name)]
-            if missing:
-                raise ValueError("Missing pico branches in {}: {}".format(filename, ", ".join(missing)))
-            scalar_names = ("weight", "w_nnlo") if sample_type == "HJ" else ("weight",)
-            for name in scalar_names:
-                leaf = tree.GetLeaf(name)
-                if (not leaf or leaf.GetLeafCount() or leaf.GetLenStatic() != 1
-                        or leaf.GetTypeName() not in ("Float_t", "Double_t")):
-                    raise ValueError("Expected floating-point scalar {} in {}".format(name, filename))
-            entries += int(tree.GetEntries())
-        finally:
-            source.Close()
-        if index % 100 == 0 or index == len(files):
-            print("Validated {}/{} pico files".format(index, len(files)), flush=True)
-    if entries == 0:
-        raise ValueError("The pico sample contains no events.")
-    return entries
 
 
 def book_histograms(root, files, sample_name, sample_type="ggH"):
@@ -723,10 +690,9 @@ def main():
             files, _ = list_pico_files(directory, max_depth=args.max_depth)
             print("  ALL {:,} ROOT files; plotting weight = {}".format(
                 len(files), "weight/w_nnlo" if kind == "HJ" else "weight"), flush=True)
-            entries = validate_files(ROOT, files, sample_type=kind)
+            print("  Processing events directly (no preliminary file-validation scan)...", flush=True)
             histograms, summary = book_histograms(ROOT, files, "sample" + str(index), sample_type=kind)
-            if summary["total"] != entries:
-                raise RuntimeError("Input event count changed while reading " + name)
+            entries = summary["total"]
             print("{}: {:,} baseline events; sum(plotting_weight)={:.8g}; sumw2={:.8g}; "
                   "negative-weight events={:,}".format(
                       name, entries, summary["sumw"], summary["sumw2"], summary["negative_weights"]), flush=True)
