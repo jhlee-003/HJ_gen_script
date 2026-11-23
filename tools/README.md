@@ -105,11 +105,11 @@ python3 tools/plotter/plot_ggF_NNLO_to_NLO_ratio.py \
 
 Sample 1's name/NNLO(HJ)/NLO(ggH) locations are required. The three `--sample2-*`
 arguments and three `--sample3-*` arguments are optional all-or-none groups.
-One PNG shows up to three named ratios as side-by-side colored bars against
-the embedded Run 3 lookup curve, with matching ratio/lookup bars below.
-Statistical error bars remain, but dot markers are not drawn. Grouping only
-changes visual positions inside each pT category, not the values, intervals
-or errors. Undefined ratios remain gaps. It uses generator-Higgs pT and the existing ratio
+One PNG overlays up to three named ratios as unfilled histogram-style step
+lines against the embedded Run 3 lookup curve, with matching ratio/lookup
+steps below. Statistical errors stay at the original bin centers; dot
+markers are not drawn. Values, intervals and errors are unchanged, and
+undefined ratios remain gaps. It uses generator-Higgs pT and the existing ratio
 prescription: BOTH HJ and ggH use `weight / w_nnlo`, separately normalized.
 This is distinct from BDT/kinematics weighting. The script is standalone and
 needs neither of the deleted Higgs-pT/w_nnlo diagnostics.

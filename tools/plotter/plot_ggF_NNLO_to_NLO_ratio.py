@@ -333,7 +333,7 @@ def build_comparison(nlo_sums, nnlo_sums, nlo_sumw2, nnlo_sumw2, weights):
     }
 
 
-def make_graphs(root, rows, tag="comparison", x_offset=0.):
+def make_graphs(root, rows, tag="comparison"):
     observed = root.TGraphErrors()
     observed.SetName(tag + "_nnlo_over_nlo")
     closure = root.TGraphErrors()
@@ -342,37 +342,34 @@ def make_graphs(root, rows, tag="comparison", x_offset=0.):
         if row["ratio"] is None:
             continue
         point = observed.GetN()
-        observed.SetPoint(point, float(index) + x_offset, row["ratio"])
+        observed.SetPoint(point, float(index), row["ratio"])
         observed.SetPointError(point, 0., row["error"])
-        closure.SetPoint(point, float(index) + x_offset, row["closure"])
+        closure.SetPoint(point, float(index), row["closure"])
         closure.SetPointError(point, 0., row["closure_error"])
     return observed, closure
 
 
-def make_bars(root, rows, field, color, width, offset, limits):
-    """Bars occupy a sub-interval of each category; undefined ratios stay gaps.
-
-    Clip only the painted rectangle to the frame. Full values and errors stay
-    unchanged in rows/error graphs, including points outside the lower range.
-    """
-    bars = []
-    baseline = min(limits[1], max(limits[0], 0.))
+def make_steps(root, rows, field, color):
+    """Draw unfilled bin-width steps, breaking the line at undefined bins."""
+    segments = []
+    segment = None
     for index, row in enumerate(rows, 1):
         if row["ratio"] is None:
+            segment = None
             continue
-        value = min(limits[1], max(limits[0], row[field]))
-        center = float(index) + offset
-        bar = root.TBox(center - width / 2., min(baseline, value),
-                        center + width / 2., max(baseline, value))
-        bar.SetFillColorAlpha(color, 0.35)
-        bar.SetLineColor(color)
-        bar.SetLineWidth(2)
-        bars.append(bar)
-    return bars
+        if segment is None:
+            segment = root.TGraph()
+            segment.SetLineColor(color)
+            segment.SetLineWidth(2)
+            segment.SetFillStyle(0)
+            segments.append(segment)
+        segment.SetPoint(segment.GetN(), index - 0.5, row[field])
+        segment.SetPoint(segment.GetN(), index + 0.5, row[field])
+    return segments
 
 
 def draw_comparison(root, comparisons, output):
-    """Grouped bars for 1-3 normalized HJ/ggH ratios, with errors and lookup."""
+    """Overlay unfilled HJ/ggH ratio steps with statistical errors and lookup."""
     if not 1 <= len(comparisons) <= 3:
         raise ValueError("Provide between one and three comparisons.")
     root.gStyle.SetOptStat(0)
@@ -408,24 +405,18 @@ def draw_comparison(root, comparisons, output):
     raw.SetLineWidth(3)
     raw.SetFillStyle(0)
     curves = []
-    bar_width = 0.78 / len(comparisons)
     for index, (comparison, color) in enumerate(zip(comparisons, ("#5B88CF", "#2CA02C", "#9467BD")), 1):
         color = root.TColor.GetColor(color)
-        offset = -0.39 + (index - 0.5) * bar_width
-        observed, closure = make_graphs(root, comparison["rows"], "comparison" + str(index), offset)
+        observed, closure = make_graphs(root, comparison["rows"], "comparison" + str(index))
         for graph in (observed, closure):
             graph.SetLineColor(color)
             graph.SetMarkerColor(color)
             graph.SetMarkerStyle(20)
             graph.SetMarkerSize(0.)
             graph.SetLineWidth(2)
-        legend_bar = root.TBox()
-        legend_bar.SetFillColorAlpha(color, 0.35)
-        legend_bar.SetLineColor(color)
-        legend_bar.SetLineWidth(2)
         curves.append({"observed": observed, "closure": closure, "color": color,
-                       "offset": offset, "rows": comparison["rows"], "legend": legend_bar})
-        keep.extend((observed, closure, legend_bar))
+                       "rows": comparison["rows"]})
+        keep.extend((observed, closure))
 
     top.cd()
     rows = [row for comparison in comparisons for row in comparison["rows"]]
@@ -440,11 +431,10 @@ def draw_comparison(root, comparisons, output):
     axes.GetYaxis().SetNdivisions(508)
     axes.Draw("AXIS")
     for curve in curves:
-        bars = make_bars(root, curve["rows"], "ratio", curve["color"], bar_width,
-                         curve["offset"], (axes.GetMinimum(), axes.GetMaximum()))
-        for bar in bars:
-            bar.Draw("SAME")
-        keep.extend(bars)
+        steps = make_steps(root, curve["rows"], "ratio", curve["color"])
+        for step in steps:
+            step.Draw("L SAME")
+        keep.extend(steps)
     unity = root.TLine(0.5, 1., bins + 0.5, 1.)
     unity.SetLineColor(root.kBlack)
     unity.SetLineStyle(2)
@@ -460,7 +450,7 @@ def draw_comparison(root, comparisons, output):
     legend.SetTextSize(0.040)
     legend.SetMargin(0.09)
     for comparison, curve in zip(comparisons, curves):
-        legend.AddEntry(curve["legend"], " " + comparison["name"], "f")
+        legend.AddEntry(curve["observed"], " " + comparison["name"], "l")
     legend.AddEntry(raw, " w_{NNLO} lookup (Run 3)", "l")
     legend.Draw()
     cms = root.TLatex()
@@ -493,11 +483,10 @@ def draw_comparison(root, comparisons, output):
     ratio_axes.GetYaxis().SetNdivisions(505)
     ratio_axes.Draw("AXIS")
     for curve in curves:
-        bars = make_bars(root, curve["rows"], "closure", curve["color"], bar_width,
-                         curve["offset"], (0., 2.))
-        for bar in bars:
-            bar.Draw("SAME")
-        keep.extend(bars)
+        steps = make_steps(root, curve["rows"], "closure", curve["color"])
+        for step in steps:
+            step.Draw("L SAME")
+        keep.extend(steps)
     line = root.TLine(0.5, 1., bins + 0.5, 1.)
     line.SetLineColor(root.kBlack)
     line.SetLineStyle(2)
