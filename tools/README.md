@@ -19,13 +19,29 @@ python3 tools/plotter/plot_ggF_BDT_var.py \
   --max-depth 1
 ```
 
-All six sample arguments are required. Each `ggH` sample uses `weight`; each
+Samples 1 and 2 require all six sample arguments. To overlay an optional third
+sample, supply `--sample3-name`, `--sample3-location`, and `--sample3-type`
+together. For example, append:
+
+```bash
+  --sample3-name "ggH (central)" \
+  --sample3-location /eos/user/j/junhyuk/ggF_MiNNLO_NanoAOD/pico/ggH2022pico \
+  --sample3-type ggH
+```
+
+Add a continuation backslash to the preceding command line when appending
+these flags. Omitting all three keeps the existing two-sample behavior.
+Each `ggH` sample uses `weight`; each
 `HJ` sample uses `weight / w_nnlo`, regardless of its position. Sample 1 is red,
-sample 2 blue; the ratio is sample 2 / sample 1. The same 19 variables, ranges,
+sample 2 blue, and optional sample 3 green. Sample 1 is always the reference:
+ratios are sample 2 / sample 1 and sample 3 / sample 1. With three samples,
+both ratio curves use their matching overlay colors and legend/count rows
+expand to three. The same 19 variables, ranges,
 binning and three PNG layouts (8 + 8 + 3) are retained. No new selections.
 
 The two optional arguments are `--output-prefix` (default derived from sample
-names) and `--max-depth` (default 1; use 2 to include one subdirectory level).
+names, including sample 3 when present) and `--max-depth` (default 1;
+use 2 to include one subdirectory level, applied to every sample).
 The example outputs `plots/HJ_gridpack_2022_{1,2,3}.png`. Existing PNGs are
 protected from overwrite. Each histogram is normalized independently to unit
 summed plotting weight; negative weights are retained and overflow is folded
@@ -52,7 +68,11 @@ python3 tools/plotter/plot_ggF_kinematics.py \
 One output: `plots/HJ_kinematics_2022.png`. The existing six variables, binning,
 ranges, 3 x 2 layout and 91.2/125 GeV mass reference lines are retained.
 Each `ggH` sample uses `weight`; each `HJ` sample uses `weight / w_nnlo`.
-Sample names become legends; the ratio is sample 2 / sample 1. Defaults are
+Sample names become legends. The same optional `--sample3-name`,
+`--sample3-location`, `--sample3-type` group is supported; all three must be
+supplied together. Ratios compare each additional sample to sample 1.
+The third sample is green and uses `weight / w_nnlo` if declared HJ, or `weight`
+if declared ggH. Defaults are
 depth 1 and a filename prefix derived from both names. Existing output PNGs
 are protected from overwrite. The two old kinematics variants and year-only
 CLI are retired. The new script does not depend on any other plotter.

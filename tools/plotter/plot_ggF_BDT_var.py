@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Compare 19 BDT-input shapes between two user-specified baseline pico samples.
+"""Compare 19 BDT-input shapes between two or three baseline pico samples.
 
 Required: --sample1-name, --sample1-location, --sample1-type {ggH,HJ},
           --sample2-name, --sample2-location, --sample2-type {ggH,HJ}.
-Optional: --output-prefix NAME, --max-depth N (default: 1).
+Optional: --sample3-name, --sample3-location, --sample3-type (all three together),
+          --output-prefix NAME, --max-depth N (default: 1).
 ggH uses weight; HJ uses weight/w_nnlo, independently for each sample.
-No extra selections. Three unit-area PNGs; ratio = sample 2 / sample 1.
+No extra selections. Three unit-area PNGs; ratios = samples 2 and 3 / sample 1.
 """
 
 import argparse
@@ -270,14 +271,23 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
                panels=None, columns=None, panel_size=(900, 600), reference_lines=None,
                legend_text_size=0.060, y_title_x=0.065,
                sample_names=("[Central] ggH_qme", "[Priavate] HJ (MiNNLO)"),
-               ratio_title="Private / Central"):
+               ratio_title="Private / Central", third_histograms=None):
     """Reference-style overlays and ratio pads, without global title/cut notes."""
     if panels is None:
         panels = PANELS
     if not panels or len(central_histograms) != len(panels) or len(private_histograms) != len(panels):
         raise ValueError("Each panel needs exactly one central and one private histogram.")
-    if any(len(event_counts[sample]) != len(panels) for sample in ("Central", "Private")):
-        raise ValueError("Each panel needs a central and private event count.")
+    groups = [central_histograms, private_histograms]
+    slots = ["Central", "Private"]
+    if third_histograms is not None:
+        if len(third_histograms) != len(panels):
+            raise ValueError("Sample 3 needs one histogram per panel.")
+        groups.append(third_histograms)
+        slots.append("Third")
+    if len(sample_names) != len(groups):
+        raise ValueError("Each plotted sample needs its own legend name.")
+    if any(sample not in event_counts or len(event_counts[sample]) != len(panels) for sample in slots):
+        raise ValueError("Each panel needs event counts for every plotted sample.")
     root.gStyle.SetOptStat(0)
     root.gStyle.SetTextFont(42)
     root.gStyle.SetLegendFont(42)
@@ -294,9 +304,10 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
     canvas = root.TCanvas("hj_comparison_canvas", "", panel_size[0] * columns, panel_size[1] * rows)
     canvas.Divide(columns, rows, 0.001, 0.001)
     keep = []
-    colors = (root.TColor.GetColor("#D62728"), root.TColor.GetColor("#5B88CF"))
-    for index, (central, private, panel) in enumerate(
-            zip(central_histograms, private_histograms, panels), start=1):
+    colors = tuple(root.TColor.GetColor(color) for color in ("#D62728", "#5B88CF", "#2CA02C"))
+    for index, panel in enumerate(panels, start=1):
+        histograms = [group[index - 1] for group in groups]
+        central = histograms[0]
         canvas.cd(index)
         categorical = bool(central.GetXaxis().GetLabels())
         vertical_labels = categorical and any(
@@ -316,7 +327,7 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         bottom.Draw()
         keep.extend((top, bottom))
         top.cd()
-        for hist, color in zip((central, private), colors):
+        for hist, color in zip(histograms, colors):
             normalize_histogram(hist)
             hist.SetTitle("")
             hist.SetLineColor(color)
@@ -328,8 +339,8 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
                 axis.SetTitleFont(42)
                 axis.SetLabelFont(42)
         values = [(h.GetBinContent(b), h.GetBinError(b))
-                  for h in (central, private) for b in range(1, h.GetNbinsX() + 1)]
-        central.SetMaximum(max(0.05, max(v + e for v, e in values) * 1.35))
+                  for h in histograms for b in range(1, h.GetNbinsX() + 1)]
+        central.SetMaximum(max(0.05, max(v + e for v, e in values) * (1.50 if len(groups) == 3 else 1.35)))
         central.SetMinimum(min(0., min(v - e for v, e in values) * 1.15))
         width = (panel[5] - panel[4]) / panel[3]
         unit = " GeV" if panel[2].endswith("[GeV]") else ""
@@ -339,7 +350,8 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         central.GetXaxis().SetLabelSize(0.)
         central.GetXaxis().SetTitleSize(0.)
         central.Draw("HIST")
-        private.Draw("HIST SAME")
+        for hist in histograms[1:]:
+            hist.Draw("HIST SAME")
         if reference_lines and panel[0] in reference_lines:
             x = reference_lines[panel[0]]
             reference = root.TLine(x, central.GetMinimum(), x, central.GetMaximum())
@@ -348,8 +360,8 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
             reference.SetLineWidth(2)
             reference.Draw()
             keep.append(reference)
-        central.Draw("E SAME")
-        private.Draw("E SAME")
+        for hist in histograms:
+            hist.Draw("E SAME")
         # Variable-width histograms show normalized bin populations. A single
         # fixed GeV width would mislabel them; fixed-width plotters keep theirs.
         y_title = ("A.U. / bin" if categorical or central.GetXaxis().GetXbins().GetSize()
@@ -357,8 +369,9 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         keep.append(draw_y_title(root, top, y_title,
                                  "hj_y_title_top_" + str(index), x=y_title_x))
         # Two aligned rows at opposite top corners, without a sample heading.
-        names = root.TLegend(0.24, 0.72, 0.65, 0.88)
-        counts = root.TLegend(0.65, 0.72, 0.895, 0.88)
+        legend_bottom = 0.64 if len(groups) == 3 else 0.72
+        names = root.TLegend(0.24, legend_bottom, 0.65, 0.88)
+        counts = root.TLegend(0.65, legend_bottom, 0.895, 0.88)
         for legend in (names, counts):
             legend.SetBorderSize(0)
             legend.SetFillStyle(0)
@@ -366,11 +379,11 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
             legend.SetTextSize(legend_text_size)
             legend.SetMargin(0.)
         names.SetMargin(0.11)
-        names.AddEntry(central, " " + sample_names[0], "l")
-        names.AddEntry(private, " " + sample_names[1], "l")
+        for hist, name in zip(histograms, sample_names):
+            names.AddEntry(hist, " " + name, "l")
         counts.SetTextAlign(32)
-        counts.AddEntry(root.nullptr, "N={:,}".format(event_counts["Central"][index - 1]), "")
-        counts.AddEntry(root.nullptr, "N={:,}".format(event_counts["Private"][index - 1]), "")
+        for slot in slots:
+            counts.AddEntry(root.nullptr, "N={:,}".format(event_counts[slot][index - 1]), "")
         for legend in (names, counts):
             legend.Draw()
         cms = root.TLatex()
@@ -387,7 +400,14 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         keep.extend((names, counts, cms, energy))
         top.RedrawAxis()
         bottom.cd()
-        ratio = make_ratio(root, private, central)
+        ratios = []
+        for sample_index, hist in enumerate(histograms[1:], start=1):
+            ratio = make_ratio(root, hist, central)
+            if len(groups) == 3:
+                ratio.SetLineColor(colors[sample_index])
+                ratio.SetMarkerColor(colors[sample_index])
+                ratio.SetMarkerStyle(19 + sample_index)
+            ratios.append(ratio)
         axis_hist = central.Clone("hj_ratio_axes_" + str(index))
         axis_hist.SetDirectory(0)
         axis_hist.Reset()
@@ -412,10 +432,11 @@ def draw_plots(root, central_histograms, private_histograms, label, output, even
         line.SetLineStyle(2)
         line.SetLineWidth(2)
         line.Draw()
-        ratio.Draw("P SAME")
+        for ratio in ratios:
+            ratio.Draw("P SAME")
         keep.append(draw_y_title(root, bottom, ratio_title,
                                  "hj_y_title_ratio_" + str(index), x=y_title_x))
-        keep.extend((axis_hist, line, ratio))
+        keep.extend((axis_hist, line, *ratios))
         bottom.RedrawAxis()
     output.parent.mkdir(parents=True, exist_ok=True)
     canvas.SaveAs(str(output))
@@ -522,23 +543,28 @@ def configured_year(value):
 def parse_arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    for index in (1, 2):
-        parser.add_argument("--sample{}-name".format(index), required=True, type=sample_label,
+    for index in (1, 2, 3):
+        required = index < 3
+        parser.add_argument("--sample{}-name".format(index), required=required, type=sample_label,
                             help="Sample {} legend label (quote spaces).".format(index))
-        parser.add_argument("--sample{}-location".format(index), required=True,
+        parser.add_argument("--sample{}-location".format(index), required=required, type=sample_label,
                             help="Local/EOS pico directory, or root:// EOS directory URL.")
-        parser.add_argument("--sample{}-type".format(index), required=True, choices=("ggH", "HJ"),
+        parser.add_argument("--sample{}-type".format(index), required=required, choices=("ggH", "HJ"),
                             help="ggH: weight; HJ: weight/w_nnlo.")
     parser.add_argument("--output-prefix", type=output_prefix,
-                        help="PNG filename prefix inside plots/; default uses both sample names.")
+                        help="PNG filename prefix inside plots/; default uses all sample names.")
     parser.add_argument("--max-depth", type=positive_depth, default=1,
-                        help="Input search depth for both samples: 1=direct files, 2=one subdirectory level.")
-    return parser, parser.parse_args(argv)
+                        help="Input search depth for all samples: 1=direct files, 2=one subdirectory level.")
+    args = parser.parse_args(argv)
+    third = (args.sample3_name, args.sample3_location, args.sample3_type)
+    if any(value is not None for value in third) and any(value is None for value in third):
+        parser.error("Sample 3 requires --sample3-name, --sample3-location and --sample3-type together.")
+    return parser, args
 
 
 def sample_label(value):
     if not value.strip():
-        raise argparse.ArgumentTypeError("Sample names must not be empty.")
+        raise argparse.ArgumentTypeError("Sample names and locations must not be empty.")
     return value.strip()
 
 
@@ -562,8 +588,10 @@ def output_prefix(value):
 def output_paths(args):
     def slug(name):
         return re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_") or "sample"
-    prefix = args.output_prefix or "ggF_BDT_var_{}_vs_{}".format(
-        slug(args.sample1_name), slug(args.sample2_name))
+    names = [args.sample1_name, args.sample2_name]
+    if args.sample3_name is not None:
+        names.append(args.sample3_name)
+    prefix = args.output_prefix or "ggF_BDT_var_" + "_vs_".join(slug(name) for name in names)
     directory = Path(__file__).resolve().parents[2] / "plots"
     return [directory / (prefix + "_" + str(page) + ".png") for page in (1, 2, 3)]
 
@@ -683,7 +711,10 @@ def main():
         samples, event_counts = {}, {}
         # Internal renderer slots retain their historical names; names, input
         # paths and ggH/HJ weighting are controlled solely by the CLI, not slots.
-        for index, slot in ((1, "Central"), (2, "Private")):
+        sample_names = (args.sample1_name, args.sample2_name)
+        if args.sample3_name is not None:
+            sample_names += (args.sample3_name,)
+        for index, slot in enumerate(("Central", "Private", "Third")[:len(sample_names)], 1):
             name = getattr(args, "sample{}_name".format(index))
             directory = getattr(args, "sample{}_location".format(index))
             kind = getattr(args, "sample{}_type".format(index))
@@ -710,8 +741,9 @@ def main():
                        "", output,
                        event_counts={sample: counts[start:stop] for sample, counts in event_counts.items()},
                        panels=panels, y_title_x=0.11,
-                       sample_names=(args.sample1_name, args.sample2_name),
-                       ratio_title="Sample 2 / 1")
+                       sample_names=sample_names,
+                       ratio_title="Samples / 1" if "Third" in samples else "Sample 2 / 1",
+                       third_histograms=samples["Third"][start:stop] if "Third" in samples else None)
             print("Saved " + str(output))
             start = stop
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
